@@ -305,10 +305,6 @@ def save_upcoming_to_db(matches_data):
         conn.close()
         logger.info(f"Saved {saved} upcoming matches to DB")
         return saved
-                except Exception as e:
-                    logger.debug(f"Save match failed: {e}")
-        logger.info(f"Saved {saved} upcoming matches to DB")
-        return saved
     except Exception as e:
         logger.warning(f"Save upcoming matches failed: {e}")
         return 0

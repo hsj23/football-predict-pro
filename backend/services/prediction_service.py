@@ -498,8 +498,6 @@ class PredictionService:
         """传统预测方法（降级使用）"""
         hs = self.TEAM_STRENGTH.get(home_team, self._default_strength(home_team))
         aws = self.TEAM_STRENGTH.get(away_team, self._default_strength(away_team))
-        hs = self.TEAM_STRENGTH.get(home_team, self._default_strength(home_team))
-        aws = self.TEAM_STRENGTH.get(away_team, self._default_strength(away_team))
         # 数据驱动修正：根据近期实际战绩调整实力评分
         hs = self._get_real_strength(home_team, hs)
         aws = self._get_real_strength(away_team, aws)
@@ -527,7 +525,14 @@ class PredictionService:
             aws -= away_injury_impact
         except:
             pass
-        home_adj = hs + self.HOME_ADVANTAGE
+
+        # 中立场地检测：世界杯、欧洲杯、美洲杯等
+        neutral_keywords = ['世界杯', '欧洲杯', '美洲杯', '亚洲杯', '非洲杯', '国际赛', '友谊赛']
+        is_neutral = any(kw in league for kw in neutral_keywords)
+
+        # 中立场地时主场优势为0
+        home_advantage = 0 if is_neutral else self.HOME_ADVANTAGE
+        home_adj = hs + home_advantage
         diff = home_adj - aws
 
         # === 1. 实力维度 (35%) ===
