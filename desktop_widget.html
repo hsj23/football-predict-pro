@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>足彩预测</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Microsoft YaHei', sans-serif;
+            background: transparent;
+            overflow: hidden;
+        }
+
+        .widget {
+            width: 320px;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            color: white;
+            padding: 15px;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .title {
+            font-size: 14px;
+            font-weight: bold;
+        }
+
+        .refresh-btn {
+            background: rgba(255,255,255,0.1);
+            border: none;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+
+        .refresh-btn:hover {
+            background: rgba(255,255,255,0.2);
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .stat-item {
+            text-align: center;
+            padding: 10px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 8px;
+        }
+
+        .stat-value {
+            font-size: 20px;
+            font-weight: bold;
+        }
+
+        .stat-label {
+            font-size: 10px;
+            color: rgba(255,255,255,0.6);
+            margin-top: 3px;
+        }
+
+        .stat-value.green { color: #67c23a; }
+        .stat-value.blue { color: #409eff; }
+        .stat-value.orange { color: #e6a23c; }
+
+        .match-list {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .match-item {
+            background: rgba(255,255,255,0.05);
+            border-radius: 8px;
+            padding: 10px;
+            margin-bottom: 8px;
+        }
+
+        .match-league {
+            font-size: 10px;
+            color: #409eff;
+            margin-bottom: 5px;
+        }
+
+        .match-teams {
+            font-size: 13px;
+            font-weight: 500;
+            margin-bottom: 5px;
+        }
+
+        .match-prediction {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 12px;
+        }
+
+        .prediction-result {
+            background: #67c23a;
+            padding: 3px 8px;
+            border-radius: 3px;
+            font-weight: bold;
+        }
+
+        .prediction-confidence {
+            color: rgba(255,255,255,0.6);
+        }
+
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: rgba(255,255,255,0.5);
+        }
+
+        .error {
+            text-align: center;
+            padding: 20px;
+            color: #f56c6c;
+        }
+
+        .footer {
+            margin-top: 15px;
+            padding-top: 10px;
+            border-top: 1px solid rgba(255,255,255,0.1);
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .footer a {
+            color: #409eff;
+            text-decoration: none;
+            font-size: 11px;
+        }
+
+        .footer a:hover {
+            text-decoration: underline;
+        }
+
+        /* 自定义滚动条 */
+        .match-list::-webkit-scrollbar {
+            width: 4px;
+        }
+        .match-list::-webkit-scrollbar-track {
+            background: rgba(255,255,255,0.05);
+            border-radius: 2px;
+        }
+        .match-list::-webkit-scrollbar-thumb {
+            background: rgba(255,255,255,0.2);
+            border-radius: 2px;
+        }
+    </style>
+</head>
+<body>
+    <div class="widget">
+        <div class="header">
+            <div class="title">📊 足彩预测系统</div>
+            <button class="refresh-btn" onclick="loadData()">刷新</button>
+        </div>
+
+        <div class="stats">
+            <div class="stat-item">
+                <div class="stat-value blue" id="todayCount">-</div>
+                <div class="stat-label">今日预测</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value green" id="accuracy">-</div>
+                <div class="stat-label">准确率</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value orange" id="recentWin">-</div>
+                <div class="stat-label">近7天</div>
+            </div>
+        </div>
+
+        <div class="match-list" id="matchList">
+            <div class="loading">加载中...</div>
+        </div>
+
+        <div class="footer">
+            <a href="daily.html">📅 每日报告</a>
+            <a href="history.html">📈 历史记录</a>
+            <a href="admin.html">⚙️ 管理后台</a>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8000/api';
+
+        async function loadData() {
+            const listEl = document.getElementById('matchList');
+            listEl.innerHTML = '<div class="loading">加载中...</div>';
+
+            try {
+                // 获取今日比赛
+                const matchesRes = await fetch(`${API_BASE}/matches/today/list`);
+                const matchesData = await matchesRes.json();
+
+                // 获取统计
+                const statsRes = await fetch(`${API_BASE}/history/statistics`);
+                const statsData = await statsRes.json();
+
+                // 更新统计数字
+                document.getElementById('todayCount').textContent = matchesData.total || 0;
+                document.getElementById('accuracy').textContent = (statsData.summary?.accuracy || 0) + '%';
+                document.getElementById('recentWin').textContent = (statsData.summary?.recent_7_days_accuracy || 0) + '%';
+
+                // 渲染比赛列表
+                renderMatches(matchesData.matches || []);
+
+            } catch (error) {
+                console.error('加载失败:', error);
+                listEl.innerHTML = '<div class="error">连接失败，请检查服务是否启动</div>';
+            }
+        }
+
+        function renderMatches(matches) {
+            const listEl = document.getElementById('matchList');
+
+            if (matches.length === 0) {
+                listEl.innerHTML = '<div class="loading">暂无今日比赛数据</div>';
+                return;
+            }
+
+            listEl.innerHTML = matches.slice(0, 8).map(m => `
+                <div class="match-item">
+                    <div class="match-league">${m.league_name || '未知联赛'}</div>
+                    <div class="match-teams">${m.home_team_name || '主队'} vs ${m.away_team_name || '客队'}</div>
+                    <div class="match-prediction">
+                        <span class="prediction-result">主胜</span>
+                        <span class="prediction-confidence">置信度 65%</span>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // 初始加载
+        loadData();
+
+        // 每5分钟自动刷新
+        setInterval(loadData, 5 * 60 * 1000);
+    </script>
+</body>
+</html>

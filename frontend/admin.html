@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FootballPredict Pro - 数据管理</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Microsoft YaHei', sans-serif; background: #f5f7fa; }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .header h1 { font-size: 20px; }
+        .nav { display: flex; gap: 10px; }
+        .nav button {
+            padding: 8px 16px;
+            background: rgba(255,255,255,0.2);
+            border: none;
+            color: white;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .nav button:hover, .nav button.active { background: rgba(255,255,255,0.3); }
+
+        .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+
+        .tabs { display: flex; gap: 10px; margin-bottom: 20px; }
+        .tab {
+            padding: 12px 24px;
+            background: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+        }
+        .tab.active { background: #409eff; color: white; }
+        .tab:hover { background: #e8e8e8; }
+        .tab.active:hover { background: #66b1ff; }
+
+        .card {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .card-header {
+            padding: 15px 20px;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .card-header h3 { font-size: 16px; }
+        .card-body { padding: 20px; }
+
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #eee; }
+        th { background: #f5f7fa; font-weight: bold; position: sticky; top: 0; }
+        tr:hover { background: #f5f7fa; }
+
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 13px;
+        }
+        .btn-primary { background: #409eff; color: white; }
+        .btn-success { background: #67c23a; color: white; }
+        .btn-danger { background: #f56c6c; color: white; }
+        .btn:hover { opacity: 0.8; }
+
+        .tag {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+        .tag-blue { background: #ecf5ff; color: #409eff; }
+        .tag-green { background: #f0f9eb; color: #67c23a; }
+        .tag-orange { background: #fdf6ec; color: #e6a23c; }
+
+        /* 表单样式 */
+        .form-group { margin-bottom: 15px; }
+        .form-group label { display: block; margin-bottom: 5px; font-weight: bold; }
+        .form-group input, .form-group select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+        .form-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        .modal.show { display: flex; }
+        .modal-content {
+            background: white;
+            padding: 25px;
+            border-radius: 10px;
+            width: 500px;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .modal-header h3 { font-size: 18px; }
+        .close-btn {
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: #909399;
+        }
+
+        .home-team { color: #409eff; font-weight: bold; }
+        .away-team { color: #f56c6c; font-weight: bold; }
+
+        .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-bottom: 20px; }
+        .stat-item { text-align: center; padding: 15px; background: #f5f7fa; border-radius: 8px; }
+        .stat-value { font-size: 24px; font-weight: bold; color: #409eff; }
+        .stat-label { color: #909399; font-size: 12px; margin-top: 5px; }
+
+        .search-box { margin-bottom: 15px; }
+        .search-box input { padding: 10px; border: 1px solid #ddd; border-radius: 5px; width: 300px; }
+
+        .table-container { max-height: 500px; overflow-y: auto; }
+
+        .odds-input { width: 80px; padding: 5px; border: 1px solid #ddd; border-radius: 4px; text-align: center; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>FootballPredict Pro - 数据管理</h1>
+        <div class="nav">
+            <button onclick="location.href='index.html'">返回首页</button>
+        </div>
+    </div>
+
+    <div class="container">
+        <!-- 标签页切换 -->
+        <div class="tabs">
+            <button class="tab active" onclick="showTab('teams')">球队数据</button>
+            <button class="tab" onclick="showTab('matches')">比赛管理</button>
+            <button class="tab" onclick="showTab('odds')">赔率管理</button>
+        </div>
+
+        <!-- 球队数据 -->
+        <div id="teamsTab" class="tab-content">
+            <div class="card">
+                <div class="card-header">
+                    <h3>球队列表</h3>
+                    <button class="btn btn-primary" onclick="showAddTeamModal()">添加球队</button>
+                </div>
+                <div class="card-body">
+                    <div class="search-box">
+                        <input type="text" id="teamSearch" placeholder="搜索球队名称..." onkeyup="searchTeams()">
+                    </div>
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>球队ID</th>
+                                    <th>球队名称</th>
+                                    <th>联赛</th>
+                                    <th>排名</th>
+                                    <th>积分</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="teamList"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 比赛管理 -->
+        <div id="matchesTab" class="tab-content" style="display:none;">
+            <div class="card">
+                <div class="card-header">
+                    <h3>比赛列表</h3>
+                    <button class="btn btn-primary" onclick="showAddMatchModal()">添加比赛</button>
+                </div>
+                <div class="card-body">
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>比赛ID</th>
+                                    <th>联赛</th>
+                                    <th>主队</th>
+                                    <th>客队</th>
+                                    <th>时间</th>
+                                    <th>状态</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="matchList"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 赔率管理 -->
+        <div id="oddsTab" class="tab-content" style="display:none;">
+            <div class="card">
+                <div class="card-header">
+                    <h3>赔率数据</h3>
+                    <button class="btn btn-primary" onclick="showAddOddsModal()">添加赔率</button>
+                </div>
+                <div class="card-body">
+                    <div class="form-group">
+                        <label>选择比赛:</label>
+                        <select id="oddsMatchSelect" onchange="loadOddsForMatch()">
+                            <option value="">请选择比赛</option>
+                        </select>
+                    </div>
+                    <div id="oddsList"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 添加球队弹窗 -->
+    <div id="teamModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>添加球队</h3>
+                <button class="close-btn" onclick="closeModal('teamModal')">&times;</button>
+            </div>
+            <form onsubmit="addTeam(event)">
+                <div class="form-group">
+                    <label>球队ID</label>
+                    <input type="text" id="teamId" required placeholder="如: MCY">
+                </div>
+                <div class="form-group">
+                    <label>球队名称</label>
+                    <input type="text" id="teamName" required placeholder="如: 曼城">
+                </div>
+                <div class="form-group">
+                    <label>联赛</label>
+                    <select id="teamLeague">
+                        <option value="英超">英超</option>
+                        <option value="西甲">西甲</option>
+                        <option value="德甲">德甲</option>
+                        <option value="意甲">意甲</option>
+                        <option value="法甲">法甲</option>
+                        <option value="中超">中超</option>
+                    </select>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>排名</label>
+                        <input type="number" id="teamRank" value="1">
+                    </div>
+                    <div class="form-group">
+                        <label>积分</label>
+                        <input type="number" id="teamPoints" value="0">
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-success" style="width:100%">添加球队</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- 添加比赛弹窗 -->
+    <div id="matchModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>添加比赛</h3>
+                <button class="close-btn" onclick="closeModal('matchModal')">&times;</button>
+            </div>
+            <form onsubmit="addMatch(event)">
+                <div class="form-group">
+                    <label>联赛</label>
+                    <select id="matchLeague">
+                        <option value="英超">英超</option>
+                        <option value="西甲">西甲</option>
+                        <option value="德甲">德甲</option>
+                        <option value="意甲">意甲</option>
+                        <option value="法甲">法甲</option>
+                        <option value="中超">中超</option>
+                    </select>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>主队</label>
+                        <input type="text" id="homeTeam" required placeholder="主队名称">
+                    </div>
+                    <div class="form-group">
+                        <label>客队</label>
+                        <input type="text" id="awayTeam" required placeholder="客队名称">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>比赛时间</label>
+                    <input type="datetime-local" id="matchTime" required>
+                </div>
+                <button type="submit" class="btn btn-success" style="width:100%">添加比赛</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- 添加赔率弹窗 -->
+    <div id="oddsModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>添加赔率</h3>
+                <button class="close-btn" onclick="closeModal('oddsModal')">&times;</button>
+            </div>
+            <form onsubmit="addOdds(event)">
+                <div class="form-group">
+                    <label>比赛ID</label>
+                    <select id="oddsMatchId" required></select>
+                </div>
+                <div class="form-group">
+                    <label>博彩公司</label>
+                    <select id="oddsBookmaker">
+                        <option value="威廉希尔">威廉希尔</option>
+                        <option value="立博">立博</option>
+                        <option value="Bet365">Bet365</option>
+                        <option value="澳门彩票">澳门彩票</option>
+                        <option value="皇冠">皇冠</option>
+                        <option value="必发">必发</option>
+                    </select>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>主胜赔率</label>
+                        <input type="number" step="0.01" id="homeOdds" required placeholder="如: 1.85">
+                    </div>
+                    <div class="form-group">
+                        <label>平局赔率</label>
+                        <input type="number" step="0.01" id="drawOdds" required placeholder="如: 3.60">
+                    </div>
+                    <div class="form-group">
+                        <label>客胜赔率</label>
+                        <input type="number" step="0.01" id="awayOdds" required placeholder="如: 4.20">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>盘口</label>
+                        <input type="number" step="0.25" id="handicap" placeholder="如: -0.5">
+                    </div>
+                    <div class="form-group">
+                        <label>类型</label>
+                        <select id="oddsType">
+                            <option value="1">初盘</option>
+                            <option value="0">即时盘</option>
+                        </select>
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-success" style="width:100%">添加赔率</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://127.0.0.1:8000/api';
+        let teams = [];
+        let matches = [];
+
+        // 标签页切换
+        function showTab(tab) {
+            document.querySelectorAll('.tab-content').forEach(el => el.style.display = 'none');
+            document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
+            document.getElementById(tab + 'Tab').style.display = 'block';
+            event.target.classList.add('active');
+        }
+
+        // 加载球队
+        async function loadTeams() {
+            try {
+                const res = await fetch(`${API_BASE}/matches/`);
+                const data = await res.json();
+                // 从比赛数据中提取球队
+                const teamSet = new Set();
+                data.items.forEach(m => {
+                    if (m.home_team_name) teamSet.add(m.home_team_name);
+                    if (m.away_team_name) teamSet.add(m.away_team_name);
+                });
+
+                // 直接使用数据库中的球队
+                const teamRes = await fetch(`${API_BASE}/matches/`);
+                renderTeamList();
+            } catch (e) {
+                console.error('加载球队失败:', e);
+            }
+        }
+
+        // 渲染球队列表
+        function renderTeamList() {
+            // 示例数据
+            const sampleTeams = [
+                { team_id: 'MCY', team_name: '曼城', league_name: '英超', ranking: 1, points: 85 },
+                { team_id: 'LIV', team_name: '利物浦', league_name: '英超', ranking: 2, points: 78 },
+                { team_id: 'ARS', team_name: '阿森纳', league_name: '英超', ranking: 3, points: 75 },
+                { team_id: 'RMA', team_name: '皇家马德里', league_name: '西甲', ranking: 1, points: 82 },
+                { team_id: 'BAR', team_name: '巴塞罗那', league_name: '西甲', ranking: 2, points: 79 },
+            ];
+
+            const tbody = document.getElementById('teamList');
+            tbody.innerHTML = sampleTeams.map(t => `
+                <tr>
+                    <td><span class="tag tag-blue">${t.team_id}</span></td>
+                    <td><strong>${t.team_name}</strong></td>
+                    <td><span class="tag tag-green">${t.league_name}</span></td>
+                    <td>${t.ranking}</td>
+                    <td><strong>${t.points}</strong></td>
+                    <td>
+                        <button class="btn btn-primary" onclick="editTeam('${t.team_id}')">编辑</button>
+                        <button class="btn btn-danger" onclick="deleteTeam('${t.team_id}')">删除</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        // 加载比赛
+        async function loadMatches() {
+            try {
+                const res = await fetch(`${API_BASE}/matches/`);
+                const data = await res.json();
+                matches = data.items;
+
+                const tbody = document.getElementById('matchList');
+                tbody.innerHTML = matches.map(m => `
+                    <tr>
+                        <td><span class="tag tag-blue">${m.match_id}</span></td>
+                        <td><span class="tag tag-green">${m.league_name || '-'}</span></td>
+                        <td class="home-team">${m.home_team_name}</td>
+                        <td class="away-team">${m.away_team_name}</td>
+                        <td>${formatDateTime(m.match_time)}</td>
+                        <td><span class="tag tag-orange">${m.status === 'scheduled' ? '未开始' : '已结束'}</span></td>
+                        <td>
+                            <button class="btn btn-primary" onclick="addOddsForMatch('${m.match_id}')">添加赔率</button>
+                            <button class="btn btn-danger" onclick="deleteMatch('${m.match_id}')">删除</button>
+                        </td>
+                    </tr>
+                `).join('');
+
+                // 更新赔率页面的比赛选择
+                updateOddsMatchSelect();
+            } catch (e) {
+                console.error('加载比赛失败:', e);
+            }
+        }
+
+        // 更新赔率比赛选择
+        function updateOddsMatchSelect() {
+            const select = document.getElementById('oddsMatchId');
+            const select2 = document.getElementById('oddsMatchSelect');
+
+            const options = matches.map(m =>
+                `<option value="${m.match_id}">${m.home_team_name} vs ${m.away_team_name}</option>`
+            ).join('');
+
+            select.innerHTML = '<option value="">请选择比赛</option>' + options;
+            if (select2) select2.innerHTML = '<option value="">请选择比赛</option>' + options;
+        }
+
+        // 加载赔率
+        async function loadOddsForMatch() {
+            const matchId = document.getElementById('oddsMatchSelect').value;
+            if (!matchId) {
+                document.getElementById('oddsList').innerHTML = '<p style="color:#909399;">请选择比赛</p>';
+                return;
+            }
+
+            try {
+                const res = await fetch(`${API_BASE}/odds/${matchId}`);
+                const data = await res.json();
+
+                if (!data.odds || data.odds.length === 0) {
+                    document.getElementById('oddsList').innerHTML = '<p style="color:#909399;">暂无赔率数据</p>';
+                    return;
+                }
+
+                document.getElementById('oddsList').innerHTML = `
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>博彩公司</th>
+                                <th>主胜</th>
+                                <th>平局</th>
+                                <th>客胜</th>
+                                <th>盘口</th>
+                                <th>类型</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${data.odds.map(o => `
+                                <tr>
+                                    <td><strong>${o.bookmaker}</strong></td>
+                                    <td>${o.home_odds || '-'}</td>
+                                    <td>${o.draw_odds || '-'}</td>
+                                    <td>${o.away_odds || '-'}</td>
+                                    <td>${o.handicap || '-'}</td>
+                                    <td><span class="tag ${o.is_opening ? 'tag-green' : 'tag-orange'}">${o.is_opening ? '初盘' : '即时'}</span></td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                `;
+            } catch (e) {
+                console.error('加载赔率失败:', e);
+            }
+        }
+
+        // 显示弹窗
+        function showAddTeamModal() {
+            document.getElementById('teamModal').classList.add('show');
+        }
+
+        function showAddMatchModal() {
+            document.getElementById('matchModal').classList.add('show');
+            // 设置默认时间为明天22:00
+            const tomorrow = new Date();
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            tomorrow.setHours(22, 0, 0, 0);
+            document.getElementById('matchTime').value = tomorrow.toISOString().slice(0, 16);
+        }
+
+        function showAddOddsModal() {
+            document.getElementById('oddsModal').classList.add('show');
+        }
+
+        function closeModal(id) {
+            document.getElementById(id).classList.remove('show');
+        }
+
+        function addOddsForMatch(matchId) {
+            document.getElementById('oddsMatchId').value = matchId;
+            showAddOddsModal();
+        }
+
+        // 添加球队
+        async function addTeam(e) {
+            e.preventDefault();
+            alert('球队添加功能需要后端支持，当前为演示模式');
+            closeModal('teamModal');
+            renderTeamList();
+        }
+
+        // 添加比赛
+        async function addMatch(e) {
+            e.preventDefault();
+
+            const league = document.getElementById('matchLeague').value;
+            const homeTeam = document.getElementById('homeTeam').value;
+            const awayTeam = document.getElementById('awayTeam').value;
+            const matchTime = document.getElementById('matchTime').value;
+
+            const matchId = `${new Date().toISOString().slice(0,10).replace(/-/g,'')}_${league.slice(0,3).toUpperCase()}_${Date.now().toString().slice(-3)}`;
+
+            try {
+                const res = await fetch(`${API_BASE}/matches/`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        match_id: matchId,
+                        league_name: league,
+                        home_team_name: homeTeam,
+                        away_team_name: awayTeam,
+                        match_time: matchTime,
+                        status: 'scheduled'
+                    })
+                });
+
+                if (res.ok) {
+                    alert('比赛添加成功!');
+                    closeModal('matchModal');
+                    loadMatches();
+                } else {
+                    alert('添加失败，请检查后端服务');
+                }
+            } catch (e) {
+                alert('添加失败: ' + e.message);
+            }
+        }
+
+        // 添加赔率
+        async function addOdds(e) {
+            e.preventDefault();
+
+            const matchId = document.getElementById('oddsMatchId').value;
+            const bookmaker = document.getElementById('oddsBookmaker').value;
+            const homeOdds = document.getElementById('homeOdds').value;
+            const drawOdds = document.getElementById('drawOdds').value;
+            const awayOdds = document.getElementById('awayOdds').value;
+            const handicap = document.getElementById('handicap').value;
+            const isOpening = document.getElementById('oddsType').value;
+
+            try {
+                const res = await fetch(`${API_BASE}/odds/`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        match_id: matchId,
+                        bookmaker: bookmaker,
+                        home_odds: parseFloat(homeOdds),
+                        draw_odds: parseFloat(drawOdds),
+                        away_odds: parseFloat(awayOdds),
+                        handicap: handicap ? parseFloat(handicap) : null,
+                        is_opening: parseInt(isOpening)
+                    })
+                });
+
+                if (res.ok) {
+                    alert('赔率添加成功!');
+                    closeModal('oddsModal');
+                    document.getElementById('oddsMatchSelect').value = matchId;
+                    loadOddsForMatch();
+                } else {
+                    alert('添加失败，请检查后端服务');
+                }
+            } catch (e) {
+                alert('添加失败: ' + e.message);
+            }
+        }
+
+        // 搜索球队
+        function searchTeams() {
+            const keyword = document.getElementById('teamSearch').value.toLowerCase();
+            const rows = document.querySelectorAll('#teamList tr');
+            rows.forEach(row => {
+                const text = row.textContent.toLowerCase();
+                row.style.display = text.includes(keyword) ? '' : 'none';
+            });
+        }
+
+        // 格式化时间
+        function formatDateTime(timeStr) {
+            if (!timeStr) return '-';
+            const d = new Date(timeStr);
+            return `${d.getMonth()+1}/${d.getDate()} ${d.getHours()}:${String(d.getMinutes()).padStart(2,'0')}`;
+        }
+
+        // 初始化
+        renderTeamList();
+        loadMatches();
+    </script>
+</body>
+</html>

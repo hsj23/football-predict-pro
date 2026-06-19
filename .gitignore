@@ -1,0 +1,61 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+venv/
+.venv/
+*.egg
+
+# Node
+node_modules/
+dist/
+.nuxt/
+
+# Database
+*.db
+*.sqlite3
+
+# Logs
+logs/
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Claude Code
+.claude/
+
+# Config (sensitive)
+.env
+.env.local
+backend/.env
+backend/app/config.py
+
+# Runtime
+.backend.pid
+.pids
+
+# Data (user specific)
+data/*.db
+data/*.json
+database/
+
+# Build
+*.exe
+*.msi
+
+# Debug files
+backend/debug_*
+backend/*.png
+backend/*.jpg
+
+# Scraped data (can be regenerated)
+data/*.html
+data/*.txt
+data/.pred_cache

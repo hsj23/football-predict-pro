@@ -1,0 +1,1281 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>足彩预测系统 - AI综合预测</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Microsoft YaHei', sans-serif; background: #f0f2f5; }
+
+        .navbar {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            padding: 0 20px;
+            display: flex;
+            align-items: center;
+            height: 50px;
+            position: fixed;
+            top: 0; left: 0; right: 0;
+            z-index: 1000;
+        }
+        .navbar h1 { color: white; font-size: 18px; margin-right: 30px; }
+        .nav-tabs { display: flex; gap: 5px; }
+        .nav-tab {
+            padding: 10px 20px;
+            background: transparent;
+            border: none;
+            color: rgba(255,255,255,0.7);
+            cursor: pointer;
+            font-size: 14px;
+            border-radius: 5px;
+        }
+        .nav-tab:hover { background: rgba(255,255,255,0.1); color: white; }
+        .nav-tab.active { background: rgba(255,255,255,0.15); color: white; }
+        .navbar-right { margin-left: auto; display: flex; gap: 10px; align-items: center; }
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #67c23a; }
+        .status-dot.offline { background: #f56c6c; }
+        .status-text { color: rgba(255,255,255,0.7); font-size: 12px; }
+        .refresh-btn { padding: 6px 15px; background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.3); color: white; border-radius: 5px; cursor: pointer; font-size: 12px; }
+
+        .main { margin-top: 50px; padding: 20px; max-width: 1400px; margin-left: auto; margin-right: auto; }
+
+        .page { display: none; }
+        .page.active { display: block; }
+        #predictPage { display: block; }
+
+        .stats-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 15px; margin-bottom: 20px; }
+        .stat-card { background: white; padding: 20px; border-radius: 12px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+        .stat-card .value { font-size: 32px; font-weight: bold; }
+        .stat-card .label { color: #909399; font-size: 13px; margin-top: 5px; }
+        .stat-card.blue .value { color: #409eff; }
+        .stat-card.green .value { color: #67c23a; }
+        .stat-card.red .value { color: #f56c6c; }
+        .stat-card.orange .value { color: #e6a23c; }
+        .stat-card.purple .value { color: #9b59b6; }
+
+        .toolbar {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+            background: white;
+            padding: 15px;
+            border-radius: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .toolbar label { font-weight: 500; color: #606266; }
+        .toolbar input, .toolbar select {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+        .toolbar button {
+            padding: 8px 20px;
+            background: #409eff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .toolbar button.green { background: #67c23a; }
+        .toolbar button.gray { background: #909399; }
+
+        .match-card {
+            background: white;
+            border-radius: 12px;
+            margin-bottom: 15px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+            overflow: hidden;
+        }
+        .match-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 12px 18px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .match-teams {
+            display: grid;
+            grid-template-columns: 1fr auto 1fr;
+            padding: 20px;
+            text-align: center;
+            align-items: center;
+            background: #fafbfc;
+        }
+        .team-name { font-size: 22px; font-weight: bold; }
+        .team-name.home { color: #409eff; }
+        .team-name.away { color: #f56c6c; }
+        .vs { font-size: 18px; color: #909399; padding: 0 20px; }
+
+        .prediction-main {
+            padding: 20px;
+            display: grid;
+            grid-template-columns: 1fr 200px;
+            gap: 20px;
+            align-items: center;
+            background: linear-gradient(135deg, #f0f9eb 0%, #e8f4ff 100%);
+        }
+        .pred-info h2 { font-size: 28px; color: #67c23a; margin-bottom: 10px; }
+        .pred-info .confidence { font-size: 16px; color: #606266; }
+        .pred-info .prob-bar { display: flex; gap: 5px; margin-top: 15px; }
+        .prob-item { padding: 8px 15px; border-radius: 5px; font-size: 12px; }
+        .prob-item.home { background: #ecf5ff; color: #409eff; }
+        .prob-item.draw { background: #fdf6ec; color: #e6a23c; }
+        .prob-item.away { background: #fef0f0; color: #f56c6c; }
+        .score-box { text-align: center; padding: 20px; background: white; border-radius: 10px; }
+        .score-box .score { font-size: 36px; font-weight: bold; color: #303133; }
+        .score-box .label { font-size: 12px; color: #909399; }
+
+        .section { padding: 15px 18px; border-top: 1px solid #eee; }
+        .section h4 { font-size: 14px; color: #303133; margin-bottom: 12px; display: flex; align-items: center; }
+        .section h4::before { content: ""; width: 3px; height: 14px; background: #409eff; margin-right: 8px; border-radius: 2px; }
+
+        .platform-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
+        .platform-item { background: #f5f7fa; padding: 12px; border-radius: 8px; text-align: center; }
+        .platform-item .name { font-size: 12px; color: #909399; margin-bottom: 5px; }
+        .platform-item .pred { font-size: 16px; font-weight: bold; color: #303133; }
+        .platform-item .conf { font-size: 11px; color: #67c23a; }
+
+        .analysis-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; }
+        .analysis-box { background: #f5f7fa; padding: 15px; border-radius: 8px; }
+        .analysis-box h5 { font-size: 13px; color: #909399; margin-bottom: 10px; }
+        .analysis-box .value { font-size: 14px; color: #303133; }
+        .analysis-box .tag { display: inline-block; padding: 3px 8px; border-radius: 3px; font-size: 12px; }
+        .tag-up { background: #e8f5e9; color: #388e3c; }
+        .tag-down { background: #ffebee; color: #d32f2f; }
+        .tag-stable { background: #f5f5f5; color: #616161; }
+
+        .reasons-list { list-style: none; }
+        .reasons-list li { padding: 8px 12px; background: #f0f9eb; border-radius: 6px; margin-bottom: 8px; font-size: 13px; color: #67c23a; }
+        .reasons-list li::before { content: "✓ "; }
+
+        .tag { display: inline-block; padding: 3px 8px; border-radius: 3px; font-size: 12px; font-weight: 600; }
+        .tag-success { background: #f0f9eb; color: #4caf50; }
+        .tag-danger { background: #fef0f0; color: #e53935; }
+        .tag-info { background: #ecf5ff; color: #1e88e5; }
+        .tag-warning { background: #fdf6ec; color: #ef6c00; }
+
+        .data-table { width: 100%; border-collapse: collapse; }
+        .data-table th, .data-table td { padding: 12px; text-align: left; border-bottom: 1px solid #eee; }
+        .data-table th { background: #f5f7fa; font-weight: 500; font-size: 13px; color: #606266; }
+
+        .loading { text-align: center; padding: 40px; color: #909399; }
+
+        .home-team { color: #409eff; font-weight: 500; }
+        .away-team { color: #f56c6c; font-weight: 500; }
+
+        .pagination { display: flex; justify-content: center; gap: 5px; margin-top: 20px; }
+        .pagination button { padding: 8px 15px; border: 1px solid #ddd; background: white; cursor: pointer; border-radius: 5px; }
+        .pagination button.active { background: #409eff; color: white; border-color: #409eff; }
+
+        .team-name-clickable {
+            text-decoration: none;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+        .team-name-clickable:hover {
+            opacity: 0.7;
+            text-decoration: underline;
+        }
+        .team-name.home { color: #409eff; }
+        .team-name.away { color: #f56c6c; }
+
+        /* 详情弹窗 */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 2000;
+            justify-content: center;
+            align-items: flex-start;
+            padding-top: 40px;
+            overflow-y: auto;
+        }
+        .modal-overlay.show { display: flex; }
+        .modal-box {
+            background: white;
+            border-radius: 12px;
+            max-width: 800px;
+            width: 95%;
+            margin-bottom: 40px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+        .modal-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .modal-header h3 { font-size: 18px; margin: 0; }
+        .modal-close {
+            background: rgba(0,0,0,0.3);
+            border: 1px solid rgba(255,255,255,0.4);
+            color: white;
+            width: 36px; height: 36px;
+            border-radius: 50%;
+            font-size: 22px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            line-height: 1;
+            transition: all 0.2s;
+        }
+        .modal-close:hover {
+            background: #f56c6c;
+            border-color: #f56c6c;
+        }
+        .modal-body { padding: 20px; }
+        .modal-section { margin-bottom: 20px; }
+        .modal-section h5 {
+            font-size: 14px;
+            color: #303133;
+            margin-bottom: 10px;
+            padding-left: 10px;
+            border-left: 3px solid #409eff;
+        }
+        .detail-reasons { list-style: none; padding: 0; }
+        .detail-reasons li {
+            padding: 8px 12px;
+            background: #f0f9eb;
+            border-radius: 6px;
+            margin-bottom: 6px;
+            font-size: 13px;
+            color: #303133;
+        }
+        .detail-reasons li::before { content: "> "; color: #67c23a; font-weight: bold; }
+        .history-row { cursor: pointer; transition: background 0.15s; }
+        .history-row:hover { background: #ecf5ff; }
+
+        @media (max-width: 768px) {
+            .stats-grid { grid-template-columns: repeat(2, 1fr); }
+            .platform-grid { grid-template-columns: repeat(2, 1fr); }
+            .analysis-grid { grid-template-columns: 1fr; }
+            .prediction-main { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <h1>AI足彩预测系统</h1>
+        <div class="nav-tabs">
+            <button class="nav-tab active" onclick="showPage('predict', event)">AI预测</button>
+            <button class="nav-tab" onclick="showPage('history', event)">历史记录</button>
+            <button class="nav-tab" onclick="showPage('stats', event)">统计</button>
+        </div>
+        <div class="navbar-right">
+            <div class="status-dot" id="statusDot"></div>
+            <span class="status-text" id="statusText">已连接</span>
+            <button class="refresh-btn" onclick="refreshAll()">刷新数据</button>
+        </div>
+    </nav>
+
+    <div class="main">
+        <!-- AI预测页面 -->
+        <div id="predictPage" class="page active">
+            <div class="stats-grid">
+                <div class="stat-card blue"><div class="value" id="d_total">-</div><div class="label">今日比赛</div></div>
+                <div class="stat-card green"><div class="value" id="d_home">-</div><div class="label">预测主胜</div></div>
+                <div class="stat-card orange"><div class="value" id="d_draw">-</div><div class="label">预测平局</div></div>
+                <div class="stat-card red"><div class="value" id="d_away">-</div><div class="label">预测客胜</div></div>
+                <div class="stat-card purple"><div class="value" id="d_acc">-</div><div class="label">历史准确率</div></div>
+            </div>
+
+            <!-- 筛选工具栏 -->
+            <div class="toolbar">
+                <label>日期：</label>
+                <input type="date" id="predictDate" onchange="filterMatches()">
+                <label>队伍：</label>
+                <input type="text" id="teamFilter" placeholder="输入队名筛选..." style="width:150px;" oninput="filterMatches()">
+                <label>联赛：</label>
+                <select id="predictLeagueFilter" onchange="filterMatches()"><option value="">全部联赛</option></select>
+                <select id="predictResultFilter" onchange="filterMatches()">
+                    <option value="">全部结果</option>
+                    <option value="home">主胜</option>
+                    <option value="draw">平局</option>
+                    <option value="away">客胜</option>
+                </select>
+                <button onclick="filterMatches()">筛选</button>
+                <button class="gray" onclick="resetMatchFilter()">重置</button>
+            </div>
+
+            <div id="matchList"><div class="loading">加载中...</div></div>
+        </div>
+
+        <!-- 历史记录页面 -->
+        <div id="historyPage" class="page">
+            <div class="stats-grid">
+                <div class="stat-card"><div class="value" id="h_total">-</div><div class="label">总预测数</div></div>
+                <div class="stat-card green"><div class="value" id="h_correct">-</div><div class="label">预测正确</div></div>
+                <div class="stat-card red"><div class="value" id="h_wrong">-</div><div class="label">预测错误</div></div>
+                <div class="stat-card blue"><div class="value" id="h_acc">-</div><div class="label">准确率</div></div>
+                <div class="stat-card purple"><div class="value" id="h_recent">-</div><div class="label">近7天准确率</div></div>
+            </div>
+
+            <!-- 筛选工具栏 -->
+            <div class="toolbar">
+                <label>队伍：</label>
+                <input type="text" id="teamHistoryFilter" placeholder="输入队伍名称..." style="width: 120px;">
+                <label>日期：</label>
+                <input type="date" id="startDate">
+                <span>至</span>
+                <input type="date" id="endDate">
+                <select id="leagueFilter">
+                    <option value="">全部联赛</option>
+                    <option value="英超">英超</option>
+                    <option value="西甲">西甲</option>
+                    <option value="德甲">德甲</option>
+                    <option value="意甲">意甲</option>
+                    <option value="法甲">法甲</option>
+                    <option value="中超">中超</option>
+                    <option value="欧冠">欧冠</option>
+                    <option value="欧联杯">欧联杯</option>
+                    <option value="亚冠">亚冠</option>
+                </select>
+                <select id="resultFilter">
+                    <option value="">全部结果</option>
+                    <option value="correct">预测正确</option>
+                    <option value="wrong">预测错误</option>
+                    <option value="pending">待验证</option>
+                </select>
+                <button onclick="filterHistory()">筛选</button>
+                <button class="gray" onclick="resetFilter()">重置</button>
+            </div>
+
+            <div class="match-card">
+                <div class="match-header"><span>历史预测记录</span><span id="recordCount">共0条</span></div>
+                <div style="overflow-x:auto;">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>日期</th>
+                                <th>联赛</th>
+                                <th>主队</th>
+                                <th>客队</th>
+                                <th>预测</th>
+                                <th>置信度</th>
+                                <th>预测比分</th>
+                                <th>实际结果</th>
+                                <th>实际比分</th>
+                                <th>状态</th>
+                            </tr>
+                        </thead>
+                        <tbody id="historyTable"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="pagination" id="pagination"></div>
+        </div>
+
+        <!-- 统计页面 -->
+        <div id="statsPage" class="page">
+            <div class="stats-grid">
+                <div class="stat-card blue"><div class="value" id="s_total">-</div><div class="label">总预测数</div></div>
+                <div class="stat-card green"><div class="value" id="s_correct">-</div><div class="label">预测正确</div></div>
+                <div class="stat-card red"><div class="value" id="s_wrong">-</div><div class="label">预测错误</div></div>
+                <div class="stat-card purple"><div class="value" id="s_acc">-</div><div class="label">综合准确率</div></div>
+                <div class="stat-card orange"><div class="value" id="s_recent">-</div><div class="label">近7天准确率</div></div>
+            </div>
+            <div class="match-card">
+                <div class="match-header"><span>预测类型分布</span></div>
+                <div class="section">
+                    <div class="platform-grid" id="predTypeStats">
+                        <div class="platform-item"><div class="name">主胜预测</div><div class="pred" id="st_home">-</div><div class="conf" id="st_home_acc">加载中</div></div>
+                        <div class="platform-item"><div class="name">平局预测</div><div class="pred" id="st_draw">-</div><div class="conf" id="st_draw_acc">加载中</div></div>
+                        <div class="platform-item"><div class="name">客胜预测</div><div class="pred" id="st_away">-</div><div class="conf" id="st_away_acc">加载中</div></div>
+                    </div>
+                </div>
+            </div>
+            <div class="match-card">
+                <div class="match-header"><span>各联赛准确率</span></div>
+                <div class="section">
+                    <div id="leagueStats" style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;"></div>
+                </div>
+            </div>
+            <div class="match-card">
+                <div class="match-header"><span>分析维度（10维度综合）</span></div>
+                <div class="section">
+                    <div class="analysis-grid">
+                        <div class="analysis-box"><h5>球队实力</h5><div class="value">20% - 200+队评分</div></div>
+                        <div class="analysis-box"><h5>近期状态</h5><div class="value">15% - 近5场战绩</div></div>
+                        <div class="analysis-box"><h5>历史交锋</h5><div class="value">10% - 交锋记录</div></div>
+                        <div class="analysis-box"><h5>赔率分析</h5><div class="value">8% - 凯利指数</div></div>
+                        <div class="analysis-box"><h5>盘口趋势</h5><div class="value">8% - 赔率变化</div></div>
+                        <div class="analysis-box"><h5>外围预测</h5><div class="value">8% - 国际数据</div></div>
+                        <div class="analysis-box"><h5>新闻伤病天气</h5><div class="value">8% - 实时影响</div></div>
+                        <div class="analysis-box"><h5>主客场表现</h5><div class="value">8% - 场地因素</div></div>
+                        <div class="analysis-box"><h5>进球效率</h5><div class="value">8% - 攻防数据</div></div>
+                        <div class="analysis-box"><h5>赛程体能</h5><div class="value">7% - 多线作战</div></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        console.log('MAIN JS LOADED');
+        const API = 'http://127.0.0.1:8000/api';
+        let currentPage = 1;
+        let allMatches = []; // 存储所有比赛数据
+
+        async function init() {
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('endDate').value = today;
+            document.getElementById('startDate').value = '2026-01-01';
+            document.getElementById('predictDate').value = '';
+
+            if (window.HISTORY_STATS) {
+                document.getElementById('h_total').textContent = window.HISTORY_STATS.total || 0;
+                document.getElementById('h_correct').textContent = window.HISTORY_STATS.correct || 0;
+                document.getElementById('h_wrong').textContent = window.HISTORY_STATS.wrong || 0;
+                document.getElementById('h_acc').textContent = (window.HISTORY_STATS.accuracy || 0) + '%';
+                document.getElementById('h_recent').textContent = (window.HISTORY_STATS.recent_7d || 0) + '%';
+            }
+            document.getElementById('statusDot').classList.remove('offline');
+            document.getElementById('statusText').textContent = '已连接';
+
+            checkStatus();
+            await loadDaily();
+            loadDailyStats();
+            // 不自动按日期筛选，显示所有未开赛比赛
+            if (allMatches.length > 0) {
+                autoSetLatestDate();
+            }
+        }
+
+        function autoSetLatestDate() {
+            if (allMatches.length === 0) return;
+            const now = new Date();
+            const future = allMatches.filter(m => {
+                if (!m.match_time) return false;
+                return new Date(m.match_time) > now;
+            });
+            let target;
+            if (future.length > 0) {
+                const dates = [...new Set(future.map(m =>
+                    (m.match_time || '').toString().substring(0, 10)
+                ))].sort();
+                target = dates[0];
+            } else {
+                const dates = [...new Set(allMatches.map(m =>
+                    (m.match_time || '').toString().substring(0, 10)
+                ))].sort();
+                target = dates[dates.length - 1] || '';
+            }
+            // 设日期但不触发onchange（先移除事件，设完再恢复）
+            const dp = document.getElementById('predictDate');
+            const oldHandler = dp.onchange;
+            dp.onchange = null;
+            dp.value = target;
+            setTimeout(() => { dp.onchange = oldHandler; }, 200);
+        }
+
+        async function checkStatus(retries = 5) {
+            for (let i = 0; i < retries; i++) {
+                try {
+                    const r = await fetch(`${API}/../health`);
+                    if (r.ok) {
+                        document.getElementById('statusDot').classList.remove('offline');
+                        document.getElementById('statusText').textContent = '已连接';
+                        return;
+                    }
+                } catch (e) {}
+                await new Promise(r => setTimeout(r, 2000));
+            }
+            document.getElementById('statusDot').classList.add('offline');
+            document.getElementById('statusText').textContent = '离线';
+        }
+
+        async function refreshData() {
+            try {
+                // 刷新今日预测
+                const res = await fetch(`${API}/data/refresh-today`, { method: 'POST' });
+                const data = await res.json();
+                if (data.success) {
+                    alert(`今日预测已更新！\n${data.matches} 场比赛\n新增 ${data.new} 条，更新 ${data.updated} 条`);
+                } else {
+                    alert(data.message || '刷新失败');
+                }
+            } catch (e) {
+                alert('刷新失败，请检查后端服务');
+            }
+            loadDaily();
+        }
+
+        function showPage(name, evt) {
+            document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+            if (evt && evt.target) evt.target.classList.add('active');
+            document.getElementById('predictPage').style.display = 'none';
+            document.getElementById('historyPage').style.display = 'none';
+            document.getElementById('statsPage').style.display = 'none';
+            document.getElementById(name + 'Page').style.display = 'block';
+            if (name === 'history') loadHistory();
+            if (name === 'stats') loadStats();
+            if (name === 'predict') loadDailyStats();
+        }
+
+        async function loadStats() {
+            try {
+                const res = await fetch(`${API}/history/statistics?start_date=2026-01-01&end_date=2099-12-31`);
+                const data = await res.json();
+                if (!data || !data.summary) return;
+                const s = data.summary;
+                document.getElementById('s_total').textContent = s.total || 0;
+                document.getElementById('s_correct').textContent = s.correct || 0;
+                document.getElementById('s_wrong').textContent = s.wrong || 0;
+                document.getElementById('s_acc').textContent = (s.accuracy || 0) + '%';
+                document.getElementById('s_recent').textContent = (s.recent_7_days_accuracy || 0) + '%';
+                // 预测类型统计
+                const pt = data.prediction_type_accuracy || [];
+                for (const p of pt) {
+                    if (p.type === 'home') { document.getElementById('st_home').textContent = p.total + '场'; document.getElementById('st_home_acc').textContent = '准确率 ' + p.accuracy + '%'; }
+                    if (p.type === 'draw') { document.getElementById('st_draw').textContent = p.total + '场'; document.getElementById('st_draw_acc').textContent = '准确率 ' + p.accuracy + '%'; }
+                    if (p.type === 'away') { document.getElementById('st_away').textContent = p.total + '场'; document.getElementById('st_away_acc').textContent = '准确率 ' + p.accuracy + '%'; }
+                }
+                // 联赛统计
+                const la = data.league_accuracy || [];
+                if (la.length > 0) {
+                    document.getElementById('leagueStats').innerHTML = la.slice(0, 12).map(l =>
+                        `<div class="analysis-box"><h5>${l.league}</h5><div class="value">${l.correct}/${l.total}</div><div style="font-size:12px;color:#${l.accuracy>=70?'67c23a':l.accuracy>=50?'e6a23c':'f56c6c'}">${l.accuracy}%</div></div>`
+                    ).join('');
+                }
+            } catch(e) {
+                console.error('加载统计失败:', e);
+            }
+        }
+
+        async function loadDaily() {
+            try {
+                const res = await fetch(`${API}/predict/batch`, { method: 'POST' });
+                const data = await res.json();
+                if (data.results && data.results.length > 0) {
+                    allMatches = data.results;
+                    renderPredictions(allMatches);
+                    updateDailyStats(allMatches);
+                    populateFilters();
+                    return;
+                }
+            } catch (e) {
+                console.error('[loadDaily] API failed:', e);
+            }
+            // Fallback
+            if (window.PREDICTIONS && window.PREDICTIONS.length > 0) {
+                allMatches = window.PREDICTIONS;
+                renderPredictions(window.PREDICTIONS);
+                updateDailyStats(window.PREDICTIONS);
+            } else {
+                loadSampleMatches();
+            }
+            populateFilters();
+        }
+
+        async function populateFilters() {
+            try {
+                const res = await fetch(`${API}/matches/`);
+                const data = await res.json();
+                const items = data.items || [];
+                const leagues = [...new Set(items.map(p => p.league_name).filter(Boolean))].sort();
+                const teams = [...new Set([...items.map(p => p.home_team_name), ...items.map(p => p.away_team_name)].filter(Boolean))].sort();
+                document.getElementById('predictLeagueFilter').innerHTML = '<option value="">全部联赛</option>' + leagues.map(l => `<option value="${l}">${l}</option>`).join('');
+                // Team filter is now an input, but we can keep a datalist for autocomplete
+            } catch (e) {}
+        }
+
+        async function loadDailyStats() {
+            try {
+                const res = await fetch(`${API}/history/statistics`);
+                const data = await res.json();
+                const s = data.summary || {};
+                document.getElementById('d_acc').textContent = (s.accuracy || 0) + '%';
+                document.getElementById('h_total').textContent = s.total || 0;
+                document.getElementById('h_correct').textContent = s.correct || 0;
+                document.getElementById('h_wrong').textContent = s.wrong || 0;
+                document.getElementById('h_acc').textContent = (s.accuracy || 0) + '%';
+                document.getElementById('h_recent').textContent = (s.recent_7_days_accuracy || 0) + '%';
+            } catch (e) {}
+        }
+
+        function filterByDate() {
+            const selDate = document.getElementById('predictDate').value;
+            if (!selDate) { filterMatches(); return; }
+            // Filter matches by selected date
+            let filtered = allMatches;
+            filtered = filtered.filter(m => {
+                if (!m.match_time) return true;
+                const mt = (m.match_time || '').toString().substring(0, 10);
+                return mt === selDate;
+            });
+            if (filtered.length > 0) {
+                renderPredictions(filtered);
+                updateDailyStats(filtered);
+            } else {
+                document.getElementById('matchList').innerHTML = '<div class="match-card"><div class="section" style="text-align:center;padding:40px;"><div style="font-size:48px;color:#c0c4cc;">?</div><div style="color:#909399;">该日期暂无比赛数据</div></div></div>';
+                updateDailyStats([]);
+            }
+        }
+
+        function filterMatches() {
+            const teamName = document.getElementById('teamFilter').value.trim().toLowerCase();
+            const league = document.getElementById('predictLeagueFilter').value;
+            const result = document.getElementById('predictResultFilter').value;
+            const selDate = document.getElementById('predictDate').value;
+
+            let filtered = allMatches;
+            if (teamName) {
+                filtered = filtered.filter(m =>
+                    (m.home_team_name && m.home_team_name.toLowerCase().includes(teamName)) ||
+                    (m.away_team_name && m.away_team_name.toLowerCase().includes(teamName))
+                );
+            }
+            if (league) {
+                filtered = filtered.filter(m => m.league_name === league);
+            }
+            if (result) {
+                filtered = filtered.filter(m => m.prediction === result);
+            }
+            if (selDate) {
+                filtered = filtered.filter(m => {
+                    if (!m.match_time) return true;
+                    return (m.match_time || '').toString().substring(0, 10) === selDate;
+                });
+            }
+
+            if (filtered.length > 0) {
+                renderPredictions(filtered);
+                updateDailyStats(filtered);
+            } else {
+                // 显示更友好的提示
+                const hint = selDate ? `日期 ${selDate} 暂无未开赛的比赛` : '暂无未开赛的比赛数据';
+                document.getElementById('matchList').innerHTML = `<div class="match-card"><div class="section" style="text-align:center;padding:40px;"><div style="font-size:48px;color:#c0c4cc;">?</div><div style="color:#909399;">${hint}</div><div style="color:#c0c4cc;font-size:12px;margin-top:10px;">点击右上角"刷新数据"拉取最新比赛</div></div></div>`;
+                updateDailyStats([]);
+            }
+        }
+
+        function resetMatchFilter() {
+            document.getElementById('teamFilter').value = '';
+            document.getElementById('predictLeagueFilter').value = '';
+            document.getElementById('predictResultFilter').value = '';
+            document.getElementById('predictDate').value = '';
+            if (allMatches.length > 0) {
+                renderPredictions(allMatches);
+                updateDailyStats(allMatches);
+            } else {
+                loadDaily();
+            }
+        }
+
+        function renderPredictions(results) {
+            const container = document.getElementById('matchList');
+            container.style.opacity = '0';
+            // 去重：同一match_id只保留第一个
+            const seen = new Set();
+            const unique = results.filter(r => {
+                if (seen.has(r.match_id)) return false;
+                seen.add(r.match_id);
+                return true;
+            });
+            const html = unique.map(r => {
+                if (r.error) {
+                    return `<div class="match-card">
+                        <div class="match-header"><span>${r.league_name}</span></div>
+                        <div class="match-teams"><div class="team-name home">${r.home_team_name}</div><div class="vs">VS</div><div class="team-name away">${r.away_team_name}</div></div>
+                        <div class="section"><div class="loading">预测生成失败</div></div></div>`;
+                }
+                const pn = {'home':'主胜','draw':'平局','away':'客胜'}[r.prediction] || r.prediction;
+                const cl = r.confidence >= 50 ? '高' : r.confidence >= 38 ? '中' : '低';
+                const platforms = r.platform_predictions || [];
+                const odds = r.odds_analysis || {};
+                const h2h = r.h2h_analysis || {};
+                const team = r.team_analysis || {};
+                const summary = r.analysis_summary || [];
+                const mt = r.match_time ? (typeof r.match_time === 'string' ? r.match_time.replace('T',' ').substring(0,16) : r.match_time) : '';
+                const predLabel = r.from_cache ? `赔率未变 · ${r.predicted_at||''}预测` : `赔率变化 · ${r.predicted_at||'刚刚'}更新`;
+                return `<div class="match-card">
+                    <div class="match-header"><span>${r.league_name}</span><span>${mt ? '比赛时间: '+mt : ''} | <span style="font-size:11px;opacity:0.8;">${predLabel}</span></span></div>
+                    <div class="match-teams">
+                        <div class="team-name home team-name-clickable" data-team="${r.home_team_name.replace(/"/g, '&quot;')}" onclick="event.stopPropagation();showTeamHistory(this.getAttribute('data-team'))">${r.home_team_name}</div>
+                        <div class="vs">VS</div>
+                        <div class="team-name away team-name-clickable" data-team="${r.away_team_name.replace(/"/g, '&quot;')}" onclick="event.stopPropagation();showTeamHistory(this.getAttribute('data-team'))">${r.away_team_name}</div>
+                    </div>
+                    <div class="prediction-main">
+                        <div class="pred-info">
+                            <h2>预测: ${pn}${r.is_close_match ? ' <span style="font-size:14px;color:#e6a23c;">⚠接近</span>' : ''}</h2>
+                            <div class="confidence" style="color:${r.confidence>=55?'#67c23a':r.confidence>=40?'#e6a23c':'#f56c6c'}">置信度: ${r.confidence}%${r.prob_gap ? ' | 差距'+r.prob_gap+'%' : ''}${window.HISTORY_STATS ? ' | 历史准确率: '+window.HISTORY_STATS.accuracy+'%' : ''}</div>
+                            ${r.is_close_match ? '<div style="margin:8px 0;padding:8px 12px;background:#fdf6ec;border-left:3px solid #e6a23c;font-size:13px;color:#e6a23c;">⚠ 实力接近，概率差距小，建议谨慎投注或回避</div>' : ''}
+                            <div class="prob-bar">
+                                <span class="prob-item home">主胜 ${r.probabilities.home}%</span>
+                                <span class="prob-item draw">平局 ${r.probabilities.draw}%</span>
+                                <span class="prob-item away">客胜 ${r.probabilities.away}%</span>
+                            </div>
+                        </div>
+                        <div class="score-box">
+                            <div class="score">${r.predicted_score || '?'}</div>
+                            <div class="label">预测比分</div>
+                        </div>
+                    </div>
+                    ${team.home ? `<div class="section"><h4>球队实力分析</h4>
+                        <div class="analysis-grid">
+                            <div class="analysis-box"><h5>主队 ${r.home_team_name}</h5><div class="value">实力 ${team.home.strength || '-'}分</div><div style="font-size:12px;color:#909399;">近5场: ${(team.home.form?.results||[]).join(' ')} (${team.home.form?.pts||0}分)</div><div style="font-size:12px;color:#909399;">胜率: ${team.home.win_rate||'-'}%</div></div>
+                            <div class="analysis-box"><h5>客队 ${r.away_team_name}</h5><div class="value">实力 ${team.away?.strength || '-'}分</div><div style="font-size:12px;color:#909399;">近5场: ${(team.away?.form?.results||[]).join(' ')} (${team.away?.form?.pts||0}分)</div><div style="font-size:12px;color:#909399;">胜率: ${team.away?.win_rate||'-'}%</div></div>
+                            <div class="analysis-box"><h5>历史交锋</h5><div class="value">${h2h.total||0}场</div><div style="font-size:12px;color:#909399;">主${h2h.home_wins||0}胜 ${h2h.draws||0}平 客${h2h.away_wins||0}胜</div></div>
+                        </div></div>` : ''}
+                    ${(()=>{const news=r.news_analysis||{};const hi=news.home||{};const ai=news.away||{};const injuries=[...(hi.injury_detail||[]),...(ai.injury_detail||[])];const hasInfo=injuries.length>0||hi.suspensions>0||ai.suspensions>0||news.weather||(news.injury_data&&(news.injury_data.home_impact>0||news.injury_data.away_impact>0));return hasInfo?`<div class="section" style="background:#fff9f0;"><h4>伤病/停赛/天气</h4><div style="display:flex;gap:15px;flex-wrap:wrap;">${injuries.map(i=>`<span class="tag tag-danger" style="font-size:12px;">伤病: ${i}</span>`).join('')}${hi.suspensions>0?`<span class="tag tag-warning">主队停赛 ${hi.suspensions}人</span>`:''}${ai.suspensions>0?`<span class="tag tag-warning">客队停赛 ${ai.suspensions}人</span>`:''}${news.injury_data&&news.injury_data.home_impact>0?`<span class="tag tag-danger">主队伤病影响 -${news.injury_data.home_impact}分</span>`:''}${news.injury_data&&news.injury_data.away_impact>0?`<span class="tag tag-danger">客队伤病影响 -${news.injury_data.away_impact}分</span>`:''}${news.weather?`<span class="tag tag-info">天气: ${news.weather} ${news.weather_impact<0?'(不利发挥)':''}</span>`:''}</div></div>`:''})()}
+                    ${platforms.length > 0 ? `<div class="section"><h4>多平台预测投票</h4>
+                        <div class="platform-grid">${platforms.map(pl => {
+                            const isReal = pl.data_source === 'real';
+                            return `<div class="platform-item" style="${isReal?'border:2px solid #67c23a;':''}"><div class="name">${pl.platform}${isReal?' <span style=\"color:#67c23a;font-size:10px;\">真实</span>':''}</div><div class="pred">${pl.prediction==='home'?'主胜':pl.prediction==='draw'?'平局':'客胜'}</div><div class="conf">${pl.confidence}%</div><div style="font-size:10px;color:#909399;">${pl.style||''}</div>${(pl.reasons||[]).length>0?`<div style="font-size:10px;color:#606266;margin-top:3px;">${pl.reasons.join(';')}</div>`:''}${pl.odds?`<div style="font-size:9px;color:#909399;">主${pl.odds.home} 平${pl.odds.draw} 客${pl.odds.away}</div>`:''}</div>`;
+                        }).join('')}</div>
+                        ${r.platform_votes ? `<div style="margin-top:12px;display:flex;gap:12px;align-items:center;background:#fafbfc;padding:10px;border-radius:8px;">
+                            <span style="font-weight:bold;color:#303133;">投票 (${r.platform_votes.consensus==='strong'?'高度共识':r.platform_votes.consensus==='moderate'?'中度共识':'低共识'}):</span>
+                            <span class="tag tag-info">主胜 ${r.platform_votes.votes?.home||0}票</span>
+                            <span class="tag tag-warning">平局 ${r.platform_votes.votes?.draw||0}票</span>
+                            <span class="tag tag-danger">客胜 ${r.platform_votes.votes?.away||0}票</span>
+                            ${r.platform_votes.model_vote ? `<span style="font-size:11px;color:#909399;">模型投: ${r.platform_votes.model_vote==='home'?'主胜':r.platform_votes.model_vote==='draw'?'平局':'客胜'}</span>` : ''}
+                        </div>
+                        ${(()=>{
+                            const mv=r.platform_votes.model_vote;
+                            const vv=r.platform_votes.votes||{};
+                            const modelName=mv==='home'?'主胜':mv==='draw'?'平局':'客胜';
+                            const topVote=Math.max(vv.home||0,vv.draw||0,vv.away||0);
+                            const topPlat=topVote==(vv.home||0)?'主胜':topVote==(vv.draw||0)?'平局':'客胜';
+                            const agree=mv===topPlat.replace('主胜','home').replace('平局','draw').replace('客胜','away');
+                            const resultText=agree?'模型与平台一致，建议参考':'模型与平台有分歧，建议谨慎';
+                            const resultColor=agree?'#67c23a':'#e6a23c';
+                            return `<div style="margin-top:8px;padding:8px 12px;background:${agree?'#f0f9eb':'#fdf6ec'};border-radius:6px;font-size:13px;color:${resultColor};text-align:center;font-weight:bold;">综合参考: ${resultText} (模型:${modelName} | 平台多数:${topPlat})</div>`;
+                        })()}
+                        </div>` : ''}
+                    </div>` : ''}
+                    ${team.home ? `<div class="section"><h4>球队分析</h4>
+                        <div class="analysis-grid">
+                            <div class="analysis-box"><h5>主队实力</h5><div class="value">${team.home.strength || '-'}分</div></div>
+                            <div class="analysis-box"><h5>客队实力</h5><div class="value">${team.away.strength || '-'}分</div></div>
+                            <div class="analysis-box"><h5>主队近况</h5><div class="value">${(team.home.form?.results||[]).join(' ')}</div></div>
+                        </div></div>` : ''}
+                    ${odds.opening_odds ? `<div class="section"><h4>赔率分析（初盘 → 当前）</h4>
+                        <div class="analysis-grid">
+                            <div class="analysis-box"><h5>主胜赔率</h5><div class="value">${odds.opening_odds?.home || '-'} → ${odds.live_odds?.home || '-'}</div>${(()=>{const o=odds.opening_odds?.home||0;const l=odds.live_odds?.home||0;const d=(l-o).toFixed(2);return d!=0?`<div style="font-size:11px;color:${d<0?'#67c23a':'#f56c6c'}">${d>0?'↑':'↓'}${Math.abs(d)}</div>`:''})()}</div>
+                            <div class="analysis-box"><h5>平局赔率</h5><div class="value">${odds.opening_odds?.draw || '-'} → ${odds.live_odds?.draw || '-'}</div>${(()=>{const o=odds.opening_odds?.draw||0;const l=odds.live_odds?.draw||0;const d=(l-o).toFixed(2);return d!=0?`<div style="font-size:11px;color:${d<0?'#67c23a':'#f56c6c'}">${d>0?'↑':'↓'}${Math.abs(d)}</div>`:''})()}</div>
+                            <div class="analysis-box"><h5>客胜赔率</h5><div class="value">${odds.opening_odds?.away || '-'} → ${odds.live_odds?.away || '-'}</div>${(()=>{const o=odds.opening_odds?.away||0;const l=odds.live_odds?.away||0;const d=(l-o).toFixed(2);return d!=0?`<div style="font-size:11px;color:${d<0?'#67c23a':'#f56c6c'}">${d>0?'↑':'↓'}${Math.abs(d)}</div>`:''})()}</div>
+                        </div>
+                        <div style="margin-top:8px;font-size:12px;color:#909399;">
+                            凯利指数: 主${odds.kelly_index?.home || '-'}% / 平${odds.kelly_index?.draw || '-'}% / 客${odds.kelly_index?.away || '-'}%
+                            ${odds.odds_change_signal ? `<br><span style="color:#e6a23c;">⚠ ${odds.odds_change_signal}</span>` : ''}
+                        </div></div>` : ''}
+                    ${r.news_analysis?.external_source?.available ? `<div class="section" style="background:#f0f9eb;"><h4>外部预测参考</h4><div style="display:flex;gap:15px;align-items:center;flex-wrap:wrap;"><div style="font-size:24px;font-weight:bold;color:#67c23a;">${r.news_analysis.external_source.prediction==='home'?'主胜':r.news_analysis.external_source.prediction==='draw'?'平局':'客胜'}</div><div style="font-size:13px;color:#606266;">来源: ${r.news_analysis.external_source.sources || '多源'} &nbsp;|&nbsp; 置信度: ${r.news_analysis.external_source.confidence || 50}% &nbsp;|&nbsp; ${r.news_analysis.external_source.votes || ''}</div></div></div>` : ''}
+                    ${summary.length > 0 ? `<div class="section"><h4>分析理由</h4><ul class="reasons-list">${summary.map(s => `<li>${s}</li>`).join('')}</ul></div>` : ''}
+                    ${(odds.sporttery_timeline && odds.sporttery_timeline.length>0) || (odds.intl_timeline && odds.intl_timeline.length>0) ? `<div class="section"><h4>赔率变化时间线</h4>
+                        ${odds.sporttery_timeline && odds.sporttery_timeline.length>0 ? `<div style="margin-bottom:10px;"><strong>体彩官方</strong><div style="display:flex;gap:8px;overflow-x:auto;padding:8px 0;">${odds.sporttery_timeline.map(n=>`<div style="min-width:140px;background:#fafbfc;padding:8px;border-radius:6px;border-left:3px solid ${n.is_opening?'#409eff':'#e6a23c'};font-size:12px;"><div style="color:#909399;">${n.time||'?'}</div><div>主${n.home} 平${n.draw} 客${n.away}</div>${n.home_change!=0?`<div style="color:${n.home_change<0?'#67c23a':'#f56c6c'}">主${n.home_change>0?'↑':'↓'}${Math.abs(n.home_change)}</div>`:''}${n.is_opening?'<div style="color:#409eff;">开盘</div>':''}</div>`).join('')}</div></div>`:''}
+                        ${odds.intl_timeline && odds.intl_timeline.length>0 ? `<div><strong>国际博彩</strong><div style="display:flex;gap:8px;overflow-x:auto;padding:8px 0;">${odds.intl_timeline.map(n=>`<div style="min-width:140px;background:#fafbfc;padding:8px;border-radius:6px;border-left:3px solid ${n.is_opening?'#67c23a':'#e6a23c'};font-size:12px;"><div style="color:#909399;">${n.bookmaker||'?'} ${n.time||''}</div><div>主${n.home} 平${n.draw} 客${n.away}</div>${n.home_change!=0?`<div style="color:${n.home_change<0?'#67c23a':'#f56c6c'}">主${n.home_change>0?'↑':'↓'}${Math.abs(n.home_change)}</div>`:''}${n.is_opening?'<div style="color:#67c23a;">初盘</div>':''}</div>`).join('')}</div></div>`:''}
+                    </div>` : ''}
+                </div>`;
+            }).join('');
+            container.innerHTML = html;
+            container.style.opacity = '1';
+        }
+
+        function loadSampleMatches() {
+            const samples = [
+                { league_name: '英超', home_team_name: '曼城', away_team_name: '利物浦' },
+                { league_name: '西甲', home_team_name: '皇家马德里', away_team_name: '巴塞罗那' },
+                { league_name: '德甲', home_team_name: '拜仁慕尼黑', away_team_name: '多特蒙德' },
+                { league_name: '意甲', home_team_name: 'AC米兰', away_team_name: '国际米兰' },
+            ];
+            renderMatches(samples);
+            updateDailyStats(samples);
+        }
+
+        async function renderMatches(matches) {
+            const container = document.getElementById('matchList');
+            container.innerHTML = '';
+
+            for (const m of matches) {
+                const card = await createMatchCard(m);
+                container.innerHTML += card;
+            }
+        }
+
+        async function createMatchCard(m) {
+            let prediction = null;
+            try {
+                const res = await fetch(`${API}/predict/generate`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ home_team: m.home_team_name, away_team: m.away_team_name, league: m.league_name })
+                });
+                prediction = await res.json();
+            } catch (e) {}
+
+            if (!prediction || prediction.error) {
+                return `<div class="match-card"><div class="match-header"><span>${m.league_name}</span></div>
+                    <div class="match-teams"><div class="team-name home">${m.home_team_name}</div><div class="vs">VS</div><div class="team-name away">${m.away_team_name}</div></div>
+                    <div class="section"><div class="loading">预测加载中...</div></div></div>`;
+            }
+
+            const p = prediction.prediction;
+            const platforms = prediction.platform_predictions || [];
+            const odds = prediction.odds_analysis || {};
+            const news = prediction.news_analysis || {};
+
+            return `
+            <div class="match-card">
+                <div class="match-header"><span>${m.league_name}</span><span>AI综合预测</span></div>
+                <div class="match-teams">
+                    <div class="team-name home">${m.home_team_name}</div>
+                    <div class="vs">VS</div>
+                    <div class="team-name away">${m.away_team_name}</div>
+                </div>
+                <div class="prediction-main">
+                    <div class="pred-info">
+                        <h2>预测: ${p.prediction_name}</h2>
+                        <div class="confidence">置信度: ${p.confidence}% (${p.confidence_level}信心)</div>
+                        <div class="prob-bar">
+                            <span class="prob-item home">主胜 ${p.probabilities.home}%</span>
+                            <span class="prob-item draw">平局 ${p.probabilities.draw}%</span>
+                            <span class="prob-item away">客胜 ${p.probabilities.away}%</span>
+                        </div>
+                    </div>
+                    <div class="score-box">
+                        <div class="score">${p.predicted_score}</div>
+                        <div class="label">预测比分</div>
+                    </div>
+                </div>
+                <div class="section">
+                    <h4>平台预测</h4>
+                    <div class="platform-grid">
+                        ${platforms.map(pl => `
+                            <div class="platform-item">
+                                <div class="name">${pl.platform}</div>
+                                <div class="pred">${pl.prediction === 'home' ? '主胜' : pl.prediction === 'draw' ? '平局' : '客胜'}</div>
+                                <div class="conf">${pl.confidence}%</div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+                <div class="section">
+                    <h4>分析指标</h4>
+                    <div class="analysis-grid">
+                        <div class="analysis-box">
+                            <h5>赔率趋势</h5>
+                            <div class="value"><span class="tag ${odds.trend === 'home_dropping' ? 'tag-up' : odds.trend === 'away_dropping' ? 'tag-down' : 'tag-stable'}">${odds.trend === 'home_dropping' ? '主胜下降' : odds.trend === 'away_dropping' ? '客胜下降' : '稳定'}</span></div>
+                        </div>
+                        <div class="analysis-box"><h5>主队伤病</h5><div class="value">${news.home?.injuries || 0} 人</div></div>
+                        <div class="analysis-box"><h5>客队伤病</h5><div class="value">${news.away?.injuries || 0} 人</div></div>
+                    </div>
+                </div>
+                <div class="section">
+                    <h4>分析结论</h4>
+                    <ul class="reasons-list">${(prediction.analysis_summary || []).map(r => `<li>${r}</li>`).join('')}</ul>
+                </div>
+            </div>`;
+        }
+
+        function updateDailyStats(matches) {
+            const total = matches.length;
+            const homes = matches.filter(m => m.prediction === 'home').length;
+            const draws = matches.filter(m => m.prediction === 'draw').length;
+            const aways = matches.filter(m => m.prediction === 'away').length;
+            const hAcc = window.HISTORY_STATS ? window.HISTORY_STATS.accuracy + '%' : '--';
+            document.getElementById('d_total').textContent = total;
+            document.getElementById('d_home').textContent = homes;
+            document.getElementById('d_draw').textContent = draws;
+            document.getElementById('d_away').textContent = aways;
+            document.getElementById('d_acc').textContent = hAcc;
+            // Also update history page stats cards with server data
+            if (window.HISTORY_STATS) {
+                document.getElementById('h_total').textContent = window.HISTORY_STATS.total || 0;
+                document.getElementById('h_correct').textContent = window.HISTORY_STATS.correct || 0;
+                document.getElementById('h_wrong').textContent = window.HISTORY_STATS.wrong || 0;
+                document.getElementById('h_acc').textContent = (window.HISTORY_STATS.accuracy || 0) + '%';
+                document.getElementById('h_recent').textContent = (window.HISTORY_STATS.recent_7d || 0) + '%';
+            }
+            // Also update stats page cards if they show stale data
+            if (document.getElementById('s_total').textContent === '-') {
+                loadDailyStats();
+            }
+        }
+
+        async function loadHistory() {
+            document.getElementById('historyTable').innerHTML = '<tr><td colspan="10" class="loading">加载中...</td></tr>';
+
+            const teamName = document.getElementById('teamHistoryFilter').value.trim();
+            const startDate = document.getElementById('startDate').value;
+            const endDate = document.getElementById('endDate').value;
+            const league = document.getElementById('leagueFilter').value;
+            const result = document.getElementById('resultFilter').value;
+
+            try {
+                // 并行请求统计和列表
+                let listUrl = `${API}/history/list?page=${currentPage}&page_size=20&start_date=${startDate}&end_date=${endDate}`;
+                if (league) listUrl += `&league=${encodeURIComponent(league)}`;
+                if (result) listUrl += `&result=${result}`;
+                if (teamName) listUrl += `&team=${encodeURIComponent(teamName)}`;
+
+                const [statsRes, listRes] = await Promise.all([
+                    fetch(`${API}/history/statistics?start_date=${startDate}&end_date=${endDate}`),
+                    fetch(listUrl)
+                ]);
+                const [statsData, listData] = await Promise.all([statsRes.json(), listRes.json()]);
+
+                document.getElementById('h_total').textContent = statsData.summary?.total || 0;
+                document.getElementById('h_correct').textContent = statsData.summary?.correct || 0;
+                document.getElementById('h_wrong').textContent = statsData.summary?.wrong || 0;
+                document.getElementById('h_acc').textContent = (statsData.summary?.accuracy || 0) + '%';
+                document.getElementById('h_recent').textContent = (statsData.summary?.recent_7_days_accuracy || 0) + '%';
+                document.getElementById('recordCount').textContent = `共${listData.total}条`;
+                renderHistoryTable(listData.records || []);
+                renderPagination(listData.total, listData.page, listData.page_size);
+
+            } catch (e) {
+                document.getElementById('historyTable').innerHTML = '<tr><td colspan="10" style="padding:20px;text-align:center;color:#f56c6c;">加载失败，请检查后端服务</td></tr>';
+            }
+        }
+
+        function renderHistoryTable(records) {
+            const resultMap = {home: '主胜', draw: '平局', away: '客胜'};
+
+            if (records.length === 0) {
+                document.getElementById('historyTable').innerHTML = '<tr><td colspan="10" class="loading">暂无数据</td></tr>';
+                return;
+            }
+
+            document.getElementById('historyTable').innerHTML = records.map(r => {
+                // 根据比分计算实际结果（更准确）
+                let actualResultText = '待比赛';
+                let actualScoreText = r.actual_score || '-';
+
+                if (r.home_score !== null && r.away_score !== null) {
+                    // 使用比分计算
+                    if (r.home_score > r.away_score) {
+                        actualResultText = '主胜';
+                    } else if (r.home_score < r.away_score) {
+                        actualResultText = '客胜';
+                    } else {
+                        actualResultText = '平局';
+                    }
+                    actualScoreText = `${r.home_score}-${r.away_score}`;
+                } else if (r.actual_result) {
+                    // 使用存储的结果
+                    actualResultText = resultMap[r.actual_result] || r.actual_result;
+                }
+
+                return `
+                <tr class="history-row" onclick="showHistoryDetail('${r.match_id}')" style="cursor:pointer" title="点击查看本场AI预测详情（预测理由、赔率变化、平台投票、球队分析）">
+                    <td>${r.match_date?.split(' ')[0] || '-'}</td>
+                    <td><span class="tag tag-info">${r.league || '-'}</span></td>
+                    <td class="home-team">${r.home_team || '-'}</td>
+                    <td class="away-team">${r.away_team || '-'}</td>
+                    <td>${r.prediction_name || '-'}</td>
+                    <td>${r.confidence ? r.confidence + '%' : '-'}</td>
+                    <td>${r.predicted_score || '-'}</td>
+                    <td>${actualResultText}</td>
+                    <td>${actualScoreText}</td>
+                    <td><span class="tag ${r.is_correct === 1 ? 'tag-success' : r.is_correct === 2 ? 'tag-danger' : 'tag-warning'}">${r.is_correct === 1 ? '正确' : r.is_correct === 2 ? '错误' : '待验证'}</span></td>
+                </tr>
+            `}).join('');
+        }
+
+        function renderPagination(total, page, pageSize) {
+            const totalPages = Math.ceil(total / pageSize);
+            const pagination = document.getElementById('pagination');
+
+            if (totalPages <= 1) {
+                pagination.innerHTML = '';
+                return;
+            }
+
+            let html = `<button ${page <= 1 ? 'disabled' : ''} onclick="changePage(${page - 1})">上一页</button>`;
+
+            for (let i = 1; i <= totalPages && i <= 5; i++) {
+                html += `<button class="${i === page ? 'active' : ''}" onclick="changePage(${i})">${i}</button>`;
+            }
+
+            html += `<button ${page >= totalPages ? 'disabled' : ''} onclick="changePage(${page + 1})">下一页</button>`;
+            pagination.innerHTML = html;
+        }
+
+        function changePage(page) {
+            currentPage = page;
+            loadHistory();
+        }
+
+        function filterHistory() {
+            currentPage = 1;
+            loadHistory();
+        }
+
+        function resetFilter() {
+            document.getElementById('teamHistoryFilter').value = '';
+            document.getElementById('leagueFilter').value = '';
+            document.getElementById('resultFilter').value = '';
+            const today = new Date().toISOString().split('T')[0];
+            const ago = new Date();
+            ago.setDate(ago.getDate() - 30);
+            document.getElementById('endDate').value = today;
+            document.getElementById('startDate').value = ago.toISOString().split('T')[0];
+            currentPage = 1;
+            loadHistory();
+        }
+
+        async function refreshAll() {
+            document.getElementById('statusDot').classList.remove('offline');
+            document.getElementById('statusText').textContent = '拉取最新比赛...';
+            checkStatus();
+            try {
+                // Step 1: 从体彩官网拉取即将开赛的比赛
+                const r0 = await fetch(`${API}/data/fetch-upcoming`, { method: 'POST' });
+                const d0 = await r0.json();
+                document.getElementById('statusText').textContent = d0.success ? `已拉取${d0.count}场比赛` : '拉取完成';
+                // Step 2: 刷新今日预测
+                await fetch(`${API}/data/refresh-today`, { method: 'POST' });
+                // Step 3: 批量生成预测
+                const r2 = await fetch(`${API}/predict/batch`, { method: 'POST' });
+                const d2 = await r2.json();
+                if (d2.results && d2.results.length > 0) {
+                    allMatches = d2.results;
+                    renderPredictions(d2.results);
+                    updateDailyStats(d2.results);
+                    populateFilters();
+                }
+                await loadDailyStats();
+                document.getElementById('statusText').textContent = '已刷新';
+                setTimeout(() => { document.getElementById('statusText').textContent = '已连接'; }, 2000);
+            } catch (e) {
+                document.getElementById('statusText').textContent = '刷新失败';
+                setTimeout(() => { document.getElementById('statusText').textContent = '已连接'; }, 3000);
+                loadDaily();
+            }
+        }
+
+        async function saveTodayPredictions() {
+            // 将今日预测自动保存到历史记录
+            try {
+                const today = new Date().toISOString().split('T')[0];
+                const res = await fetch(`${API}/matches/today/list`);
+                const data = await res.json();
+                if (!data.matches) return;
+                for (const m of data.matches) {
+                    try {
+                        const pr = await fetch(`${API}/predict/generate`, {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({home_team: m.home_team_name, away_team: m.away_team_name, league: m.league_name})
+                        });
+                        const pred = await pr.json();
+                        if (pred.prediction) {
+                            await fetch(`${API}/history/save?match_id=${encodeURIComponent(m.match_id)}&match_date=${today} ${m.match_time?.split('T')[1] || '20:00'}&league=${encodeURIComponent(m.league_name)}&home_team=${encodeURIComponent(m.home_team_name)}&away_team=${encodeURIComponent(m.away_team_name)}&prediction_result=${pred.prediction.prediction}&prediction_name=${encodeURIComponent(pred.prediction.prediction_name)}&confidence=${pred.prediction.confidence}`, {method: 'POST'});
+                        }
+                    } catch(e) {}
+                }
+            } catch(e) {}
+        }
+
+        // === 球队历史 & 详情弹窗 ===
+
+        function showTeamHistory(teamName) {
+            // 切换到历史记录标签页
+            document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+            document.getElementById('predictPage').style.display = 'none';
+            document.getElementById('historyPage').style.display = 'block';
+            document.getElementById('statsPage').style.display = 'none';
+            const histTab = document.querySelectorAll('.nav-tab')[1];
+            if (histTab) histTab.classList.add('active');
+
+            // 设置队伍筛选并加载
+            document.getElementById('teamHistoryFilter').value = teamName || '';
+            currentPage = 1;
+            loadHistory();
+            window.scrollTo({top: 0, behavior: 'smooth'});
+        }
+
+        async function showHistoryDetail(matchId) {
+            var m = document.getElementById('detailModal');
+            m.classList.add('show');
+            m.style.display = 'flex';
+            document.getElementById('modalBody').innerHTML = '<div class="loading">加载中...</div>';
+
+            try {
+                const res = await fetch(`${API}/history/detail/${encodeURIComponent(matchId)}`);
+                const data = await res.json();
+
+                if (data.error) {
+                    document.getElementById('modalBody').innerHTML = `<div class="loading" style="color:#f56c6c;">${data.error}</div>`;
+                    return;
+                }
+
+                document.getElementById('modalTitle').textContent = `${data.home_team_name || '?'} vs ${data.away_team_name || '?'}`;
+
+                const p = data.prediction || {};
+                const odds = data.odds_analysis || {};
+                const platforms = data.platform_predictions || [];
+                const team = data.team_analysis || {};
+                const h2h = data.h2h_analysis || {};
+                const summary = data.analysis_summary || [];
+                const predNames = {home: '主胜', draw: '平局', away: '客胜'};
+
+                let isCorrectHtml = '';
+                if (data.is_correct === 1) isCorrectHtml = '<span class="tag tag-success">预测正确 ✓</span>';
+                else if (data.is_correct === 2) isCorrectHtml = '<span class="tag tag-danger">预测错误 ✗</span>';
+
+                let html = `
+                    <div class="modal-section" style="text-align:center;">
+                        <div style="font-size:14px;color:#909399;margin-bottom:10px;">${data.league_name || ''}</div>
+                        <div style="font-size:22px;font-weight:bold;">
+                            <span style="color:#409eff;">${data.home_team_name || '?'}</span>
+                            <span style="margin:0 15px;color:#909399;">
+                                ${data.actual_score || 'VS'}
+                            </span>
+                            <span style="color:#f56c6c;">${data.away_team_name || '?'}</span>
+                        </div>
+                        ${data.match_time ? `<div style="font-size:12px;color:#909399;margin-top:5px;">${data.match_time}</div>` : ''}
+                    </div>
+
+                    <div class="modal-section">
+                        <h5>AI 预测结果</h5>
+                        <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap;">
+                            <div style="font-size:28px;font-weight:bold;color:#${p.prediction==='home'?'409eff':p.prediction==='draw'?'e6a23c':'f56c6c'};">${p.prediction_name || '-'}</div>
+                            <div style="font-size:16px;color:#606266;">置信度: ${p.confidence ? Math.round(p.confidence)+'%' : '-'}</div>
+                            ${isCorrectHtml}
+                        </div>
+                        ${p.probabilities ? `
+                        <div style="display:flex;gap:10px;margin-top:10px;">
+                            <span class="prob-item home">主胜 ${Math.round(p.probabilities.home)}%</span>
+                            <span class="prob-item draw">平局 ${Math.round(p.probabilities.draw)}%</span>
+                            <span class="prob-item away">客胜 ${Math.round(p.probabilities.away)}%</span>
+                        </div>` : ''}
+                        ${p.predicted_score ? `<div style="margin-top:8px;font-size:14px;color:#606266;">预测比分: ${p.predicted_score}</div>` : ''}
+                    </div>
+
+                    ${data.actual_result ? `
+                    <div class="modal-section">
+                        <h5>实际结果</h5>
+                        <div style="display:flex;align-items:center;gap:10px;">
+                            <span style="font-size:18px;font-weight:bold;">${predNames[data.actual_result] || data.actual_result}</span>
+                            ${data.actual_score ? `<span style="font-size:16px;">(${data.actual_score})</span>` : ''}
+                            ${isCorrectHtml}
+                        </div>
+                    </div>` : ''}
+
+                    ${summary.length > 0 ? `
+                    <div class="modal-section">
+                        <h5>预测理由</h5>
+                        <ul class="detail-reasons">${summary.map(s => `<li>${s}</li>`).join('')}</ul>
+                    </div>` : ''}
+
+                    ${odds.opening_odds ? `
+                    <div class="modal-section">
+                        <h5>赔率分析</h5>
+                        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;text-align:center;">
+                            <div class="analysis-box">
+                                <h5>主胜</h5>
+                                <div class="value" style="color:#409eff;">${odds.opening_odds.home || '-'}</div>
+                                <div style="font-size:11px;color:#909399;">初盘 → ${odds.live_odds?.home || '-'}</div>
+                            </div>
+                            <div class="analysis-box">
+                                <h5>平局</h5>
+                                <div class="value" style="color:#e6a23c;">${odds.opening_odds.draw || '-'}</div>
+                                <div style="font-size:11px;color:#909399;">初盘 → ${odds.live_odds?.draw || '-'}</div>
+                            </div>
+                            <div class="analysis-box">
+                                <h5>客胜</h5>
+                                <div class="value" style="color:#f56c6c;">${odds.opening_odds.away || '-'}</div>
+                                <div style="font-size:11px;color:#909399;">初盘 → ${odds.live_odds?.away || '-'}</div>
+                            </div>
+                        </div>
+                        ${odds.kelly_index ? `
+                        <div style="margin-top:10px;font-size:12px;color:#909399;text-align:center;">
+                            凯利指数: 主${odds.kelly_index.home||'-'}% / 平${odds.kelly_index.draw||'-'}% / 客${odds.kelly_index.away||'-'}%
+                        </div>` : ''}
+                        ${odds.trend ? `
+                        <div style="margin-top:5px;text-align:center;"><span class="tag tag-warning">趋势: ${typeof odds.trend === 'string' ? odds.trend : '稳定'}</span></div>` : ''}
+                        ${odds.odds_change_signal && typeof odds.odds_change_signal === 'string' ? `
+                        <div style="margin-top:5px;text-align:center;"><span class="tag tag-warning">信号: ${odds.odds_change_signal}</span></div>` : ''}
+                    </div>` : ''}
+
+                    ${platforms.length > 0 ? `
+                    <div class="modal-section">
+                        <h5>各平台预测投票</h5>
+                        ${(()=>{
+                            const vh=platforms.filter(p=>p.prediction==='home').length;
+                            const vd=platforms.filter(p=>p.prediction==='draw').length;
+                            const va=platforms.filter(p=>p.prediction==='away').length;
+                            return '<div style="display:flex;gap:10px;margin-bottom:10px;justify-content:center;"><span class="tag tag-info">主胜 '+vh+'票</span><span class="tag tag-warning">平局 '+vd+'票</span><span class="tag tag-danger">客胜 '+va+'票</span></div>';
+                        })()}
+                        <table class="data-table">
+                            <thead><tr><th>平台</th><th>分析方法</th><th>预测</th><th>置信度</th><th>理由</th></tr></thead>
+                            <tbody>
+                                ${platforms.map(pl => `
+                                <tr style="${pl.data_source==='real'?'background:#f0f9eb;':''}">
+                                    <td>${pl.platform || '-'}${pl.data_source==='real'?' <span style=\"color:#67c23a;font-size:10px;\">真</span>':''}</td>
+                                    <td style="font-size:11px;color:#909399;">${pl.style || '-'}</td>
+                                    <td><span class="tag ${pl.prediction==='home'?'tag-info':pl.prediction==='draw'?'tag-warning':'tag-danger'}">${predNames[pl.prediction] || pl.prediction || '-'}</span></td>
+                                    <td>${pl.confidence ? pl.confidence+'%' : '-'}</td>
+                                    <td style="font-size:11px;color:#606266;">${(pl.reasons||[]).join('; ')||'-'}${pl.odds?` (主${pl.odds.home}平${pl.odds.draw}客${pl.odds.away})`:''}</td>
+                                </tr>`).join('')}
+                            </tbody>
+                        </table>
+                    </div>` : ''}
+
+                    ${team.home ? `
+                    <div class="modal-section">
+                        <h5>球队分析</h5>
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                            <div class="analysis-box"><h5>${team.home.name || '主队'} 实力</h5><div class="value">${team.home.strength || '-'}分</div><div style="font-size:12px;color:#909399;">近期: ${(team.home.form?.results||[]).join(' ')}</div></div>
+                            <div class="analysis-box"><h5>${team.away?.name || '客队'} 实力</h5><div class="value">${team.away?.strength || '-'}分</div><div style="font-size:12px;color:#909399;">近期: ${(team.away?.form?.results||[]).join(' ')}</div></div>
+                        </div>
+                    </div>` : ''}
+
+                    ${data.prediction_history && data.prediction_history.length > 1 ? `
+                    <div class="modal-section">
+                        <h5>预测演变时间线 (${data.prediction_history.length}次)</h5>
+                        <div style="max-height:200px;overflow-y:auto;">
+                        ${data.prediction_history.map((v,i) => `
+                            <div style="display:flex;align-items:center;gap:12px;padding:8px;background:${i===0?'#f0f9eb':'#fafbfc'};border-radius:6px;margin-bottom:4px;font-size:13px;">
+                                <span style="color:#909399;min-width:70px;">${v.created_at}</span>
+                                <span class="tag ${v.prediction==='home'?'tag-info':v.prediction==='draw'?'tag-warning':'tag-danger'}">${predNames[v.prediction]||v.prediction}</span>
+                                <span style="color:#606266;">${v.confidence}%</span>
+                                <span style="color:#c0c4cc;">${v.predicted_score||'?'}</span>
+                                ${i===0?'<span class="tag tag-success" style="font-size:10px;">最新</span>':''}
+                            </div>
+                        `).join('')}
+                        </div>
+                    </div>` : ''}
+
+                    <div style="text-align:center;margin-top:20px;padding-top:15px;border-top:1px solid #eee;">
+                        <button onclick="closeDetail()" style="padding:10px 40px;background:#f56c6c;color:white;border:none;border-radius:6px;font-size:15px;cursor:pointer;">关闭</button>
+                    </div>
+                `;
+
+                document.getElementById('modalBody').innerHTML = html;
+            } catch (e) {
+                document.getElementById('modalBody').innerHTML = '<div class="loading" style="color:#f56c6c;">加载失败: ' + e.message + '</div>';
+            }
+        }
+
+        function closeDetail() {
+            var m = document.getElementById('detailModal');
+            m.classList.remove('show');
+            m.style.display = 'none';
+        }
+
+        init();
+    </script>
+
+    <!-- 预测详情弹窗 -->
+    <div class="modal-overlay" id="detailModal" onclick="if(event.target===this)closeDetail()">
+        <div class="modal-box">
+            <div class="modal-header">
+                <h3 id="modalTitle">预测详情</h3>
+                <button class="modal-close" onclick="event.stopPropagation();closeDetail()" title="关闭">&times;</button>
+            </div>
+            <div class="modal-body" id="modalBody">加载中...</div>
+        </div>
+    </div>
+</body>
+</html>
