@@ -1,0 +1,154 @@
+[
+  {
+    "home": "拜仁慕尼黑",
+    "away": "科隆",
+    "home_score": 5,
+    "away_score": 1,
+    "date": "2026-05-16",
+    "league": "德甲"
+  },
+  {
+    "home": "勒沃库森",
+    "away": "汉堡",
+    "home_score": 1,
+    "away_score": 1,
+    "date": "2026-05-16",
+    "league": "德甲"
+  },
+  {
+    "home": "法兰克福",
+    "away": "斯图加特",
+    "home_score": 2,
+    "away_score": 2,
+    "date": "2026-05-16",
+    "league": "德甲"
+  },
+  {
+    "home": "弗赖堡",
+    "away": "莱比锡",
+    "home_score": 4,
+    "away_score": 1,
+    "date": "2026-05-16",
+    "league": "德甲"
+  },
+  {
+    "home": "云达不莱梅",
+    "away": "多特蒙德",
+    "home_score": 0,
+    "away_score": 2,
+    "date": "2026-05-16",
+    "league": "德甲"
+  },
+  {
+    "home": "门兴格拉德巴赫",
+    "away": "霍芬海姆",
+    "home_score": 4,
+    "away_score": 0,
+    "date": "2026-05-16",
+    "league": "德甲"
+  },
+  {
+    "home": "柏林联合",
+    "away": "奥格斯堡",
+    "home_score": 4,
+    "away_score": 0,
+    "date": "2026-05-16",
+    "league": "德甲"
+  },
+  {
+    "home": "圣保利",
+    "away": "沃尔夫斯堡",
+    "home_score": 1,
+    "away_score": 3,
+    "date": "2026-05-16",
+    "league": "德甲"
+  },
+  {
+    "home": "1. FC Heidenheim 1846",
+    "away": "美因茨",
+    "home_score": 0,
+    "away_score": 2,
+    "date": "2026-05-16",
+    "league": "德甲"
+  },
+  {
+    "home": "埃尔弗斯贝格",
+    "away": "普鲁士明斯特",
+    "home_score": 3,
+    "away_score": 0,
+    "date": "2026-05-17",
+    "league": "德乙"
+  },
+  {
+    "home": "马格德堡",
+    "away": "凯泽斯劳滕",
+    "home_score": 0,
+    "away_score": 1,
+    "date": "2026-05-17",
+    "league": "德乙"
+  },
+  {
+    "home": "卡尔斯鲁厄",
+    "away": "波鸿",
+    "home_score": 1,
+    "away_score": 2,
+    "date": "2026-05-17",
+    "league": "德乙"
+  },
+  {
+    "home": "汉诺威96",
+    "away": "纽伦堡",
+    "home_score": 3,
+    "away_score": 3,
+    "date": "2026-05-17",
+    "league": "德乙"
+  },
+  {
+    "home": "达姆施塔特",
+    "away": "帕德博恩",
+    "home_score": 0,
+    "away_score": 2,
+    "date": "2026-05-17",
+    "league": "德乙"
+  },
+  {
+    "home": "菲尔特",
+    "away": "杜塞尔多夫",
+    "home_score": 3,
+    "away_score": 0,
+    "date": "2026-05-17",
+    "league": "德乙"
+  },
+  {
+    "home": "沙尔克04",
+    "away": "不伦瑞克",
+    "home_score": 1,
+    "away_score": 0,
+    "date": "2026-05-17",
+    "league": "德乙"
+  },
+  {
+    "home": "比勒费尔德",
+    "away": "柏林赫塔",
+    "home_score": 6,
+    "away_score": 1,
+    "date": "2026-05-17",
+    "league": "德乙"
+  },
+  {
+    "home": "Dynamo Dresden",
+    "away": "基尔",
+    "home_score": 2,
+    "away_score": 1,
+    "date": "2026-05-17",
+    "league": "德乙"
+  },
+  {
+    "home": "皇家马德里",
+    "away": "马德里竞技",
+    "home_score": 1,
+    "away_score": 0,
+    "date": "2016-05-29",
+    "league": "欧冠"
+  }
+]
