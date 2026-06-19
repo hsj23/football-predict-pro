@@ -269,7 +269,7 @@ class HybridPredictor:
         return self.fe._get_team_strength(team_name)
 
     def _is_close_match(self, home: str, away: str, odds: Optional[List] = None) -> bool:
-        """判断是否是实力接近的比赛"""
+        """判断是否是实力接近的比赛 — 只在有赔率时才判断"""
         if odds:
             h, d, a = float(odds[0]), float(odds[1]), float(odds[2])
             # 明显一边倒 → 不接近
@@ -285,11 +285,10 @@ class HybridPredictor:
                 return False
             if a < 1.8 and h > 5.0:
                 return False
+            return True
 
-        # 基于Elo判断
-        hs = self._get_elo_strength(home)
-        aws = self._get_elo_strength(away)
-        return abs(hs - aws) <= 10
+        # 没有赔率时，不判断为接近（避免误判）
+        return False
 
     def _predict_from_odds(self, odds: List) -> Dict:
         """从赔率获取隐含概率预测 — 使用 Shin 方法去除抽水偏差"""
@@ -772,23 +771,45 @@ class HybridPredictor:
         else:
             final_probs = {'home': 33.3, 'draw': 33.3, 'away': 33.3}
 
-        # ── 平局修正：赔率隐含概率是主要信号 ──
+        # ── 平局修正：只在有真实赔率数据时才修正 ──
         odds_implied_draw = 0
+        has_real_odds = odds is not None  # 是否有真实赔率数据
+        
         if odds_pred:
             odds_implied_draw = odds_pred['probabilities'].get('draw', 0)
 
-        if odds_pred and odds_implied_draw > 0:
+        # 只在有真实赔率时才进行平局修正
+        if has_real_odds and odds_pred and odds_implied_draw > 0:
             odds_h = odds_pred['probabilities'].get('home', 0)
             odds_a = odds_pred['probabilities'].get('away', 0)
-            if odds_implied_draw >= max(odds_h, odds_a) - 3:
-                draw_boost = min(8.0, (odds_implied_draw - 28) * 0.5) if odds_implied_draw > 28 else 2.0
+            
+            # 平局赔率
+            draw_odds_val = float(odds[1]) if len(odds) > 1 else 3.5
+            
+            # 只在实力接近时才提升平局概率
+            strength_gap = abs(odds_h - odds_a)
+            
+            # 规则1: 赔率平局概率 > 22% 且实力非常接近（差距<8%）→ 平局信号
+            if odds_implied_draw >= 22 and strength_gap < 8:
+                draw_boost = min(10.0, (odds_implied_draw - 20) * 0.6)
                 final_probs['draw'] = final_probs.get('draw', 0) + draw_boost
                 if final_probs.get('home', 0) > final_probs.get('away', 0):
-                    final_probs['home'] = max(0, final_probs.get('home', 0) - draw_boost * 0.6)
-                    final_probs['away'] = max(0, final_probs.get('away', 0) - draw_boost * 0.4)
+                    final_probs['home'] = max(0, final_probs.get('home', 0) - draw_boost * 0.55)
+                    final_probs['away'] = max(0, final_probs.get('away', 0) - draw_boost * 0.45)
                 else:
-                    final_probs['home'] = max(0, final_probs.get('home', 0) - draw_boost * 0.4)
-                    final_probs['away'] = max(0, final_probs.get('away', 0) - draw_boost * 0.6)
+                    final_probs['home'] = max(0, final_probs.get('home', 0) - draw_boost * 0.45)
+                    final_probs['away'] = max(0, final_probs.get('away', 0) - draw_boost * 0.55)
+            
+            # 规则2: 平赔 < 3.2 且实力接近（差距<10%）→ 平局信号
+            elif draw_odds_val < 3.2 and strength_gap < 10:
+                draw_boost = min(12.0, (3.5 - draw_odds_val) * 6)
+                final_probs['draw'] = final_probs.get('draw', 0) + draw_boost
+                if final_probs.get('home', 0) > final_probs.get('away', 0):
+                    final_probs['home'] = max(0, final_probs.get('home', 0) - draw_boost * 0.55)
+                    final_probs['away'] = max(0, final_probs.get('away', 0) - draw_boost * 0.45)
+                else:
+                    final_probs['home'] = max(0, final_probs.get('home', 0) - draw_boost * 0.45)
+                    final_probs['away'] = max(0, final_probs.get('away', 0) - draw_boost * 0.55)
 
         if dc_pred:
             dc_draw_p = dc_pred['probabilities'].get('draw', 0)
@@ -851,29 +872,37 @@ class HybridPredictor:
         # 市场信号极强（赔率差>1.5）→ 真金白银，完全信任市场方向，不做先验修正
         market_very_clear = odds_spread > 1.5
 
-        if odds_home_extreme or odds_away_extreme or market_very_clear:
+        # 只在有真实赔率时才应用先验修正
+        if not has_real_odds:
+            # 没有真实赔率时，不做先验修正
+            PRIOR_HOME = 1.0; PRIOR_DRAW = 1.0; PRIOR_AWAY = 1.0
+        elif odds_home_extreme or odds_away_extreme or market_very_clear:
             PRIOR_HOME = 1.0; PRIOR_DRAW = 1.0; PRIOR_AWAY = 1.0
         elif odds_home_strong:
             PRIOR_HOME = 0.95; PRIOR_DRAW = 1.05; PRIOR_AWAY = 1.05
         elif is_close:
-            PRIOR_HOME = 0.88; PRIOR_DRAW = 1.15; PRIOR_AWAY = 1.10
+            PRIOR_HOME = 0.90; PRIOR_DRAW = 1.10; PRIOR_AWAY = 1.05
         else:
-            PRIOR_HOME = 0.90; PRIOR_DRAW = 1.15; PRIOR_AWAY = 1.05
+            PRIOR_HOME = 0.92; PRIOR_DRAW = 1.08; PRIOR_AWAY = 1.03
 
         adj_home = final_home_p * PRIOR_HOME
         adj_draw = final_draw_p * PRIOR_DRAW
         adj_away = final_away_p * PRIOR_AWAY
 
-        # 4a) 赔率平赔最高或接近最高 → 强平局信号
-        if odds_implied_draw >= max(odds_pred['probabilities'].get('home', 0), odds_pred['probabilities'].get('away', 0)) - 2 if odds_pred else False:
+        # 4a) 有真实赔率且平赔接近最高 → 平局
+        if has_real_odds and odds_pred and odds_implied_draw >= max(odds_pred['probabilities'].get('home', 0), odds_pred['probabilities'].get('away', 0)) - 3:
             prediction = 'draw'
             confidence = final_draw_p
-        # 4b) 概率差距极小且平局有基础 → 平局（收紧：draw >= 30）
-        elif prob_gap < 3 and final_draw_p >= 30:
+        # 4b) 概率差距极小且平局有基础 → 平局（降低阈值到25%）
+        elif prob_gap < 3 and final_draw_p >= 25:
             prediction = 'draw'
             confidence = final_draw_p
-        # 4c) 实力接近 + 平局概率高 → 平局（收紧：draw >= 33）
-        elif prob_gap < 5 and is_close and final_draw_p >= 33:
+        # 4c) 实力接近 + 平局概率较高 → 平局（降低阈值到28%）
+        elif prob_gap < 5 and is_close and final_draw_p >= 28:
+            prediction = 'draw'
+            confidence = final_draw_p
+        # 4c2) 有真实赔率 + 赔率平局概率 > 22% + 胜负概率接近 → 平局
+        elif has_real_odds and odds_pred and odds_implied_draw >= 22 and abs(final_home_p - final_away_p) < 12:
             prediction = 'draw'
             confidence = final_draw_p
         # 4d) 调整后的客胜超越主胜 → 客胜
