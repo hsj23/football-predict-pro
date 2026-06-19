@@ -845,102 +845,33 @@ class HybridPredictor:
         sorted_probs = sorted(final_probs.values(), reverse=True)
         prob_gap = sorted_probs[0] - sorted_probs[1] if len(sorted_probs) > 1 else 0
 
-        # 4) 最终决策：类别先验校准 + 多规则判定
-        # 核心思想：模型系统性高估主胜、低估平局和客胜，
-        # 用真实分布先验 (home~44%, draw~26%, away~30%) 调整决策边界
+        # 4) 最终决策：简单规则
         final_draw_p = final_probs.get('draw', 0)
         final_home_p = final_probs.get('home', 0)
         final_away_p = final_probs.get('away', 0)
 
-        # 类别先验校准因子 (Threshold Moving)
-        # 基于全球足球真实分布: 主胜44% 平局26% 客胜30%
-        # 因子 = 真实频率 / 模型预期频率
-        # 动态调整：赔率确认强队时降低修正力度，胶着比赛加大修正
-        odds_home_strong = odds_pred and odds_pred['probabilities'].get('home', 0) > 58
-        odds_home_extreme = odds_pred and odds_pred['probabilities'].get('home', 0) > 72
-        odds_away_extreme = odds_pred and odds_pred['probabilities'].get('away', 0) > 72
-
-        # 计算赔率离散度来判断市场信号强度
-        odds_spread = 0
-        if odds:
-            try:
-                odds_vals = [float(o) for o in odds]
-                odds_spread = max(odds_vals) - min(odds_vals)
-            except:
-                pass
-
-        # 市场信号极强（赔率差>1.5）→ 真金白银，完全信任市场方向，不做先验修正
-        market_very_clear = odds_spread > 1.5
-
-        # 只在有真实赔率时才应用先验修正
-        if not has_real_odds:
-            # 没有真实赔率时，不做先验修正
-            PRIOR_HOME = 1.0; PRIOR_DRAW = 1.0; PRIOR_AWAY = 1.0
-        elif odds_home_extreme or odds_away_extreme or market_very_clear:
-            PRIOR_HOME = 1.0; PRIOR_DRAW = 1.0; PRIOR_AWAY = 1.0
-        elif odds_home_strong:
-            PRIOR_HOME = 0.95; PRIOR_DRAW = 1.05; PRIOR_AWAY = 1.05
-        elif is_close:
-            PRIOR_HOME = 0.90; PRIOR_DRAW = 1.10; PRIOR_AWAY = 1.05
-        else:
-            PRIOR_HOME = 0.92; PRIOR_DRAW = 1.08; PRIOR_AWAY = 1.03
-
-        adj_home = final_home_p * PRIOR_HOME
-        adj_draw = final_draw_p * PRIOR_DRAW
-        adj_away = final_away_p * PRIOR_AWAY
-
-        # 获取 ML 模型的预测（用于高置信度时信任 ML）
+        # 获取 ML 模型的预测
         ml_pred = model_pred['prediction'] if model_pred else None
         ml_conf = model_pred['confidence'] if model_pred else 0
 
-        # 4a) ML模型高度自信(>50%)且预测客胜 → 直接信任ML（跳过校准干扰）
+        # 规则1: ML模型高度自信(>50%) → 直接信任ML
         if ml_pred == 'away' and ml_conf > 50:
             prediction = 'away'
             confidence = final_away_p
-        # 4b) ML模型高度自信(>50%)且预测主胜 → 直接信任ML
         elif ml_pred == 'home' and ml_conf > 50:
             prediction = 'home'
             confidence = final_home_p
-        # 4c) 有真实赔率且平赔接近最高 → 平局
+        # 规则2: 有真实赔率且平赔接近最高 → 平局
         elif has_real_odds and odds_pred and odds_implied_draw >= max(odds_pred['probabilities'].get('home', 0), odds_pred['probabilities'].get('away', 0)) - 3:
             prediction = 'draw'
             confidence = final_draw_p
-        # 4d) 概率差距极小且平局有基础 → 平局
+        # 规则3: 概率差距极小且平局有基础 → 平局
         elif prob_gap < 3 and final_draw_p >= 25:
             prediction = 'draw'
             confidence = final_draw_p
-        # 4e) 实力接近 + 平局概率较高 → 平局
-        elif prob_gap < 5 and is_close and final_draw_p >= 28:
-            prediction = 'draw'
-            confidence = final_draw_p
-        # 4f) 有真实赔率 + 赔率平局概率 > 22% + 胜负概率接近 → 平局
-        elif has_real_odds and odds_pred and odds_implied_draw >= 22 and abs(final_home_p - final_away_p) < 12:
-            prediction = 'draw'
-            confidence = final_draw_p
-        # 4g) 调整后的客胜超越主胜 → 客胜
-        elif adj_away > adj_home and adj_away > adj_draw:
-            prediction = 'away'
-            confidence = final_away_p
-        # 4e) 调整后的平局超越主胜和客胜 → 平局（增加安全边际）
-        elif adj_draw > adj_home * 1.05 and adj_draw > adj_away * 1.05:
-            prediction = 'draw'
-            confidence = final_draw_p
-        # 4f) 赔率指向客胜且模型差距小 → 客胜
-        elif odds_pred and odds_pred['prediction'] == 'away' and prob_gap < 8:
-            prediction = 'away'
-            confidence = final_away_p
-        # 4g) 赔率指向客胜（正常情况）→ 客胜
-        elif odds_pred and odds_pred['prediction'] == 'away':
-            prediction = 'away'
-            confidence = final_away_p
-        # 4h) 模型指向客胜且有足够概率 → 客胜
-        elif model_pred and model_pred['prediction'] == 'away' and final_away_p > 28:
-            prediction = 'away'
-            confidence = final_away_p
-        # 4i) 兜底：校准后的最高分
+        # 规则4: 直接使用融合后概率最高者
         else:
-            adj_scores = {'home': adj_home, 'draw': adj_draw, 'away': adj_away}
-            prediction = max(adj_scores, key=adj_scores.get)
+            prediction = max(final_probs, key=final_probs.get)
             confidence = final_probs[prediction]
 
         # 兜底纠正1：赔率高度明确指向一方，模型却预测另一方 → 信市场
