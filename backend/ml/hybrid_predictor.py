@@ -889,23 +889,35 @@ class HybridPredictor:
         adj_draw = final_draw_p * PRIOR_DRAW
         adj_away = final_away_p * PRIOR_AWAY
 
-        # 4a) 有真实赔率且平赔接近最高 → 平局
-        if has_real_odds and odds_pred and odds_implied_draw >= max(odds_pred['probabilities'].get('home', 0), odds_pred['probabilities'].get('away', 0)) - 3:
+        # 获取 ML 模型的预测（用于高置信度时信任 ML）
+        ml_pred = model_pred['prediction'] if model_pred else None
+        ml_conf = model_pred['confidence'] if model_pred else 0
+
+        # 4a) ML模型高度自信(>50%)且预测客胜 → 直接信任ML（跳过校准干扰）
+        if ml_pred == 'away' and ml_conf > 50:
+            prediction = 'away'
+            confidence = final_away_p
+        # 4b) ML模型高度自信(>50%)且预测主胜 → 直接信任ML
+        elif ml_pred == 'home' and ml_conf > 50:
+            prediction = 'home'
+            confidence = final_home_p
+        # 4c) 有真实赔率且平赔接近最高 → 平局
+        elif has_real_odds and odds_pred and odds_implied_draw >= max(odds_pred['probabilities'].get('home', 0), odds_pred['probabilities'].get('away', 0)) - 3:
             prediction = 'draw'
             confidence = final_draw_p
-        # 4b) 概率差距极小且平局有基础 → 平局（降低阈值到25%）
+        # 4d) 概率差距极小且平局有基础 → 平局
         elif prob_gap < 3 and final_draw_p >= 25:
             prediction = 'draw'
             confidence = final_draw_p
-        # 4c) 实力接近 + 平局概率较高 → 平局（降低阈值到28%）
+        # 4e) 实力接近 + 平局概率较高 → 平局
         elif prob_gap < 5 and is_close and final_draw_p >= 28:
             prediction = 'draw'
             confidence = final_draw_p
-        # 4c2) 有真实赔率 + 赔率平局概率 > 22% + 胜负概率接近 → 平局
+        # 4f) 有真实赔率 + 赔率平局概率 > 22% + 胜负概率接近 → 平局
         elif has_real_odds and odds_pred and odds_implied_draw >= 22 and abs(final_home_p - final_away_p) < 12:
             prediction = 'draw'
             confidence = final_draw_p
-        # 4d) 调整后的客胜超越主胜 → 客胜
+        # 4g) 调整后的客胜超越主胜 → 客胜
         elif adj_away > adj_home and adj_away > adj_draw:
             prediction = 'away'
             confidence = final_away_p
