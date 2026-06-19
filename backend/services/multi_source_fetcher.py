@@ -65,7 +65,7 @@ def fetch_odds_api_odds(league_name='英超'):
     import urllib.request, json as jx, gzip as gz
 
     sport_key = LEAGUE_TO_ODDS_SPORT.get(league_name, 'soccer_uefa_nations_league')
-    url = f'{ODDS_API_BASE}/sports/{sport_key}/odds/?apiKey={ODDS_API_KEY}&regions=uk,eu&markets=h2h&oddsFormat=decimal'
+    url = f'{ODDS_API_BASE}/sports/{sport_key}/odds/?apiKey={ODDS_API_KEY}&regions=uk,eu&markets=h2h,spreads,totals&oddsFormat=decimal'
 
     try:
         proxy_handler = urllib.request.ProxyHandler({'http': PROXY_URL, 'https': PROXY_URL}) if PROXY_URL else None
@@ -86,7 +86,7 @@ def fetch_odds_api_odds(league_name='英超'):
 
 
 def get_odds_api_predictions(home_team, away_team, league_name='国际赛'):
-    """从Odds API获取某场比赛的各博彩公司预测"""
+    """从Odds API获取某场比赛的各博彩公司预测（含让球盘+大小球）"""
     global _odds_api_cache, _odds_api_cache_time
 
     # 10分钟缓存
@@ -114,46 +114,126 @@ def get_odds_api_predictions(home_team, away_team, league_name='国际赛'):
         for bm in bookmakers[:12]:  # 最多12家
             bm_name = bm.get('title', '')
             markets = bm.get('markets', [])
+
+            ho = do = ao = None
+            handicap = None       # 让球数
+            handicap_odds = None  # 让球赔率
+            over_line = None      # 大小球盘口
+            over_odds = None      # 大球赔率
+            under_odds = None     # 小球赔率
+
             for market in markets:
-                if market.get('key') != 'h2h':
-                    continue
+                mkey = market.get('key', '')
                 outcomes = market.get('outcomes', [])
-                if len(outcomes) < 3:
-                    continue
-                ho = do = ao = None
-                for o in outcomes:
-                    if o['name'] == mh: ho = o['price']
-                    elif o['name'] == ma: ao = o['price']
-                    elif o['name'] == 'Draw': do = o['price']
-                if ho and do and ao:
-                    total = 1/ho + 1/do + 1/ao
-                    hp = round(1/ho / total * 100, 1)
-                    dp = round(1/do / total * 100, 1)
-                    ap = round(1/ao / total * 100, 1)
-                    best = max([('home', hp), ('draw', dp), ('away', ap)], key=lambda x: x[1])
-                    conf = min(75, max(30, best[1] + 5))
 
-                    # 理由
-                    reasons = []
-                    if ho < 2.0: reasons.append(f'{bm_name}: 主胜低赔({ho})，市场看好')
-                    if do < 3.5: reasons.append(f'{bm_name}: 平赔偏低({do})')
-                    if ao < 2.5: reasons.append(f'{bm_name}: 客胜赔付合理')
-                    if abs(ho - ao) < 0.3: reasons.append(f'{bm_name}: 赔率接近，实力均衡')
-                    if not reasons: reasons.append(f'{bm_name}: 市场无明确倾向')
+                if mkey == 'h2h' and len(outcomes) >= 3:
+                    for o in outcomes:
+                        if o['name'] == mh: ho = o['price']
+                        elif o['name'] == ma: ao = o['price']
+                        elif o['name'] == 'Draw': do = o['price']
 
-                    results.append({
-                        'platform': bm_name,
-                        'prediction': best[0],
-                        'confidence': conf,
-                        'style': f'国际赔率 (返还率{round((1-total)*100,1)}%)',
-                        'reasons': reasons,
-                        'odds': {'home': round(ho, 2), 'draw': round(do, 2), 'away': round(ao, 2)},
-                        'data_source': 'real',
-                    })
-                break  # 只取h2h市场
+                elif mkey == 'spreads' and len(outcomes) >= 2:
+                    # 让球盘: home favorite gets negative point spread
+                    for o in outcomes:
+                        if o['name'] == mh:
+                            handicap = o.get('point', 0)
+                            handicap_odds = o.get('price', 0)
+
+                elif mkey == 'totals' and len(outcomes) >= 2:
+                    for o in outcomes:
+                        over_line = o.get('point', 2.5)
+                        if o['name'] == 'Over':
+                            over_odds = o.get('price', 0)
+                        elif o['name'] == 'Under':
+                            under_odds = o.get('price', 0)
+
+            if ho and do and ao:
+                total = 1/ho + 1/do + 1/ao
+                hp = round(1/ho / total * 100, 1)
+                dp = round(1/do / total * 100, 1)
+                ap = round(1/ao / total * 100, 1)
+                best = max([('home', hp), ('draw', dp), ('away', ap)], key=lambda x: x[1])
+                conf = min(75, max(30, best[1] + 5))
+
+                # 理由
+                reasons = []
+                if ho < 2.0: reasons.append(f'{bm_name}: 主胜低赔({ho})，市场看好')
+                if do < 3.5: reasons.append(f'{bm_name}: 平赔偏低({do})')
+                if ao < 2.5: reasons.append(f'{bm_name}: 客胜赔付合理')
+                if abs(ho - ao) < 0.3: reasons.append(f'{bm_name}: 赔率接近，实力均衡')
+                # 让球盘分析
+                if handicap is not None:
+                    if handicap < 0: reasons.append(f'{bm_name}: 让球{handicap}，看好主队')
+                    elif handicap > 0: reasons.append(f'{bm_name}: 让球+{handicap}，看好客队')
+                    else: reasons.append(f'{bm_name}: 平手盘')
+                # 大小球分析
+                if over_line is not None and over_odds is not None:
+                    if over_odds < 1.8: reasons.append(f'{bm_name}: 大{over_line}球低赔，看好进球多')
+                    elif under_odds and under_odds < 1.8: reasons.append(f'{bm_name}: 小{over_line}球低赔，看好进球少')
+                if not reasons: reasons.append(f'{bm_name}: 市场无明确倾向')
+
+                result = {
+                    'platform': bm_name,
+                    'prediction': best[0],
+                    'confidence': conf,
+                    'style': f'国际赔率 (返还率{round((1-total)*100,1)}%)',
+                    'reasons': reasons,
+                    'odds': {'home': round(ho, 2), 'draw': round(do, 2), 'away': round(ao, 2)},
+                    'data_source': 'real',
+                }
+                if handicap is not None:
+                    result['handicap'] = handicap
+                    result['handicap_odds'] = handicap_odds
+                if over_line is not None:
+                    result['over_under_line'] = over_line
+                    result['over_odds'] = over_odds
+                    result['under_odds'] = under_odds
+                results.append(result)
 
     logger.info(f'Odds API: found {len(results)} bookmakers for {home_team} vs {away_team}')
     return results
+
+
+def get_odds_api_handicap_totals(home_team, away_team, league_name='国际赛'):
+    """从Odds API获取某场比赛的平均让球盘和大小球数据（用于特征工程）"""
+    predictions = get_odds_api_predictions(home_team, away_team, league_name)
+    if not predictions:
+        return None
+
+    handicaps = []
+    handicap_odds_list = []
+    over_lines = []
+    over_odds_list = []
+    under_odds_list = []
+
+    for p in predictions:
+        if 'handicap' in p:
+            handicaps.append(p['handicap'])
+            handicap_odds_list.append(p.get('handicap_odds', 0))
+        if 'over_under_line' in p:
+            over_lines.append(p['over_under_line'])
+            over_odds_list.append(p.get('over_odds', 0))
+            under_odds_list.append(p.get('under_odds', 0))
+
+    result = {}
+    if handicaps:
+        result['avg_handicap'] = round(sum(handicaps) / len(handicaps), 2)
+        result['handicap_count'] = len(handicaps)
+        if handicap_odds_list:
+            valid = [x for x in handicap_odds_list if x > 0]
+            if valid:
+                result['avg_handicap_home_odds'] = round(sum(valid) / len(valid), 2)
+    if over_lines:
+        result['avg_over_line'] = round(sum(over_lines) / len(over_lines), 2)
+        valid_over = [x for x in over_odds_list if x > 0]
+        valid_under = [x for x in under_odds_list if x > 0]
+        if valid_over:
+            result['avg_over_odds'] = round(sum(valid_over) / len(valid_over), 2)
+        if valid_under:
+            result['avg_under_odds'] = round(sum(valid_under) / len(valid_under), 2)
+        result['over_under_count'] = len(over_lines)
+
+    return result if result else None
 
 
 def _smart_fetch(url, headers=None, timeout=15, encoding='utf-8', retry=2, method='GET', data=None, use_proxy=True):

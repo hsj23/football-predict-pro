@@ -516,6 +516,21 @@ class HybridPredictor:
             'league_name': league,
         }
 
+        # 获取让球盘+大小球数据（用于特征工程）
+        try:
+            from services.multi_source_fetcher import get_odds_api_handicap_totals
+            handicap_info = get_odds_api_handicap_totals(home, away, league)
+            if handicap_info:
+                match_data['handicap_data'] = {
+                    'avg_handicap': handicap_info.get('avg_handicap', 0.0),
+                    'avg_handicap_home_odds': handicap_info.get('avg_handicap_home_odds', 1.9),
+                    'avg_over_under_line': handicap_info.get('avg_over_line', 2.5),
+                    'avg_over_odds': handicap_info.get('avg_over_odds', 1.9),
+                    'avg_under_odds': handicap_info.get('avg_under_odds', 1.9),
+                }
+        except Exception:
+            pass  # API失败时使用默认中性值
+
         odds_data = None
         if odds and len(odds) == 3:
             odds_data = {
