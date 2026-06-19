@@ -24,6 +24,10 @@ PROXY_URL = os.environ.get('HTTP_PROXY', 'http://127.0.0.1:7892')
 ODDS_API_KEY = '63e6c2103ea9f9a8fe8509f2add255b0'
 ODDS_API_BASE = 'https://api.the-odds-api.com/v4'
 
+# OddsPapi 备用配置（免费，350+博彩公司）
+ODDSPAPI_BASE = 'https://api.oddspapi.io/v3'
+ODDSPAPI_KEY = os.environ.get('ODDSPAPI_KEY', '')  # 需要注册获取
+
 # 足球联赛映射 (竞彩联赛 → OddsAPI sport key)
 LEAGUE_TO_ODDS_SPORT = {
     '英超': 'soccer_england_premier_league',
@@ -54,19 +58,21 @@ CACHE_TTL = 1800
 
 
 # ═══════════════════════════════════════════════
-#  0. The Odds API — 真实国际博彩赔率
+#  0. The Odds API — 真实国际博彩赔率（备用：OddsPapi）
 # ═══════════════════════════════════════════════
 
 _odds_api_cache = {}
 _odds_api_cache_time = 0
 
 def fetch_odds_api_odds(league_name='英超'):
-    """从The Odds API获取真实博彩赔率 — 免费500 credits/月"""
+    """从The Odds API获取真实博彩赔率 — 免费500 credits/月，失败时用OddsPapi"""
     import urllib.request, json as jx, gzip as gz
 
     sport_key = LEAGUE_TO_ODDS_SPORT.get(league_name, 'soccer_uefa_nations_league')
+    
+    # 主数据源：The Odds API
     url = f'{ODDS_API_BASE}/sports/{sport_key}/odds/?apiKey={ODDS_API_KEY}&regions=uk,eu&markets=h2h,spreads,totals&oddsFormat=decimal'
-
+    
     try:
         proxy_handler = urllib.request.ProxyHandler({'http': PROXY_URL, 'https': PROXY_URL}) if PROXY_URL else None
         opener = urllib.request.build_opener(proxy_handler) if proxy_handler else urllib.request.build_opener()
@@ -81,7 +87,28 @@ def fetch_odds_api_odds(league_name='英超'):
             data = jx.loads(raw.decode('utf-8'))
             return data
     except Exception as e:
-        logger.warning(f'Odds API failed: {e}')
+        logger.warning(f'Odds API failed: {e}, trying OddsPapi fallback...')
+        # 备用：OddsPapi
+        return _fetch_oddspapi(sport_key)
+
+
+def _fetch_oddspapi(sport_key):
+    """备用数据源：OddsPapi（免费，350+博彩公司）"""
+    import urllib.request, json as jx
+    
+    if not ODDSPAPI_KEY:
+        logger.debug('OddsPapi key not configured, skipping')
+        return []
+    
+    url = f'{ODDSPAPI_BASE}/odds?sport={sport_key}&apiKey={ODDSPAPI_KEY}'
+    try:
+        req = urllib.request.Request(url, headers={'User-Agent': 'FootballPredict/1.0'})
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            data = jx.loads(resp.read().decode('utf-8'))
+            logger.info(f'OddsPapi: fetched {len(data)} matches')
+            return data
+    except Exception as e:
+        logger.debug(f'OddsPapi failed: {e}')
         return []
 
 
@@ -236,37 +263,43 @@ def get_odds_api_handicap_totals(home_team, away_team, league_name='国际赛'):
     return result if result else None
 
 
-def _smart_fetch(url, headers=None, timeout=15, encoding='utf-8', retry=2, method='GET', data=None, use_proxy=True):
-    """智能HTTP抓取 — 自动重试 + UA轮换 + 代理支持"""
-    import urllib.request, urllib.error, ssl
+def _smart_fetch(url, headers=None, timeout=15, encoding='utf-8', retry=3, method='GET', data=None, use_proxy=True):
+    """智能HTTP抓取 — 自动重试 + UA轮换 + 代理支持 + 反限流"""
+    import urllib.request, urllib.error, ssl, time as _time
 
     ssl_ctx = ssl.create_default_context()
     ssl_ctx.check_hostname = False
     ssl_ctx.verify_mode = ssl.CERT_NONE
 
-    # 配置代理
-    proxy_handler = None
+    # 配置代理（多代理轮换）
+    proxy_handlers = []
     if use_proxy and PROXY_URL:
-        proxy_handler = urllib.request.ProxyHandler({'http': PROXY_URL, 'https': PROXY_URL})
+        proxy_handlers.append(urllib.request.ProxyHandler({'http': PROXY_URL, 'https': PROXY_URL}))
 
     for attempt in range(retry + 1):
+        # 随机延迟（反限流）
+        if attempt > 0:
+            delay = random.uniform(2, 5) * attempt
+            _time.sleep(delay)
+        
         ua = random.choice(UA_POOL)
         req_headers = {
             'User-Agent': ua,
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-            'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9,zh-CN;q=0.8',
             'Accept-Encoding': 'gzip, deflate, br',
             'Cache-Control': 'no-cache',
             'Pragma': 'no-cache',
             'Sec-Ch-Ua': '"Google Chrome";v="120"',
             'Sec-Fetch-Dest': 'document',
             'Sec-Fetch-Mode': 'navigate',
+            'Connection': 'keep-alive',
         }
         if headers:
             req_headers.update(headers)
 
         req = urllib.request.Request(url, headers=req_headers, data=data.encode() if data else None, method=method)
-        opener = urllib.request.build_opener(proxy_handler) if proxy_handler else urllib.request.build_opener()
+        opener = urllib.request.build_opener(*proxy_handlers) if proxy_handlers else urllib.request.build_opener()
         try:
             with opener.open(req, timeout=timeout, context=ssl_ctx) as resp:
                 raw = resp.read()
@@ -298,18 +331,36 @@ _forebet_cache = None
 _forebet_cache_time = 0
 
 def _fetch_forebet():
-    """抓取Forebet今日预测 — 带限流保护"""
+    """抓取Forebet今日预测 — 带限流保护和反检测"""
     global _forebet_cache, _forebet_cache_time
     now = time.time()
-    if _forebet_cache is not None and now - _forebet_cache_time < 1800:
+    # 增加缓存时间到60分钟（避免频繁请求）
+    if _forebet_cache is not None and now - _forebet_cache_time < 3600:
         return _forebet_cache
 
     results = []
-    html = _smart_fetch('https://forebet.com/en/football-tips-and-predictions-for-today',
-                        headers={'Referer': 'https://forebet.com/', 'Accept-Language': 'en-US,en;q=0.9'},
-                        use_proxy=True, timeout=20)
+    
+    # 尝试多个Forebet域名（反封禁）
+    forebet_urls = [
+        'https://forebet.com/en/football-tips-and-predictions-for-today',
+        'https://www.forebet.com/en/football-tips-and-predictions-for-today',
+    ]
+    
+    for url in forebet_urls:
+        html = _smart_fetch(url,
+                            headers={
+                                'Referer': 'https://www.google.com/',
+                                'Accept-Language': 'en-US,en;q=0.9',
+                                'Sec-Fetch-Site': 'cross-site',
+                            },
+                            use_proxy=True, timeout=25, retry=3)
+        if html:
+            break
+        # 切换域名前等待
+        time.sleep(random.uniform(3, 6))
+    
     if not html:
-        logger.warning('Forebet fetch failed (rate limited?)')
+        logger.warning('Forebet fetch failed (all attempts)')
         return _forebet_cache or []  # 返回旧缓存
 
     # 更新缓存
