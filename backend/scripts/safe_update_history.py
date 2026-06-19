@@ -7,6 +7,11 @@ from app.db_helper import db_cursor
 from ml.hybrid_predictor import HybridPredictor
 from datetime import datetime
 
+# 清除类级别缓存，确保使用最新模型
+HybridPredictor._team_form_cache = None
+HybridPredictor._h2h_cache = None
+HybridPredictor._ensemble = None
+
 hp = HybridPredictor()
 
 # 1. 获取所有有实际结果的记录

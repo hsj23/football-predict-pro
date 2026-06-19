@@ -58,8 +58,8 @@ class FeatureEngineer:
         'strength_diff', 'rest_days_diff',
         'importance_score', 'league_avg_goals',
 
-        # 让球盘+大小球特征 (5)
-        'handicap_value', 'handicap_home_odds',
+        # 让球盘+大小球特征 (6)
+        'has_handicap_data', 'handicap_value', 'handicap_home_odds',
         'over_under_line', 'over_odds', 'under_odds'
     ]
 
@@ -500,22 +500,24 @@ class FeatureEngineer:
             features[48] = 2.5
             features[49] = 2.0
 
-        # ── 7. 让球盘+大小球特征 (50-54) ──
+        # ── 7. 让球盘+大小球特征 (50-55) ──
         # 从 match_data 中获取让球盘和大小球数据
         handicap_data = match_data.get('handicap_data', {})
-        if handicap_data:
-            features[50] = handicap_data.get('avg_handicap', 0.0)       # 让球数（负=看好主队）
-            features[51] = handicap_data.get('avg_handicap_home_odds', 1.9)  # 让球赔率
-            features[52] = handicap_data.get('avg_over_under_line', 2.5)     # 大小球盘口
-            features[53] = handicap_data.get('avg_over_odds', 1.9)           # 大球赔率
-            features[54] = handicap_data.get('avg_under_odds', 1.9)          # 小球赔率
+        if handicap_data and handicap_data.get('avg_handicap') is not None:
+            features[50] = 1.0                                          # 有真实数据
+            features[51] = handicap_data.get('avg_handicap', 0.0)       # 让球数（负=看好主队）
+            features[52] = handicap_data.get('avg_handicap_home_odds', 1.9)  # 让球赔率
+            features[53] = handicap_data.get('avg_over_under_line', 2.5)     # 大小球盘口
+            features[54] = handicap_data.get('avg_over_odds', 1.9)           # 大球赔率
+            features[55] = handicap_data.get('avg_under_odds', 1.9)          # 小球赔率
         else:
             # 默认值：无数据时使用中性值
-            features[50] = 0.0   # 平手盘
-            features[51] = 1.9   # 标准赔率
-            features[52] = 2.5   # 标准大小球盘口
-            features[53] = 1.9   # 标准赔率
+            features[50] = 0.0   # 无真实数据标记
+            features[51] = 0.0   # 平手盘
+            features[52] = 1.9   # 标准赔率
+            features[53] = 2.5   # 标准大小球盘口
             features[54] = 1.9   # 标准赔率
+            features[55] = 1.9   # 标准赔率
 
         return features
 
@@ -695,7 +697,7 @@ class FeatureEngineer:
             0, 0, 0, 0,    0, 0, 0, 0,            # 趋势+一致性 (8)
             0, 0,                                  # H2H 进阶 (2)
             0, 0, -1, 0,   0, 0,                   # 其他 (6)
-            -3, 1.1, 1.5, 1.1, 1.1                 # 让球盘+大小球 (5)
+            0, -3, 1.1, 1.5, 1.1, 1.1             # 让球盘+大小球 (6)
         ], dtype=np.float64)
 
         max_vals = np.array([
@@ -707,7 +709,7 @@ class FeatureEngineer:
             10, 10, 5, 5,   1, 1,                  # 趋势+一致性
             5, 5,                                  # H2H 进阶
             1, 1, 1, 5,    1.5, 3.5,              # 其他
-            3, 3.0, 4.5, 3.0, 3.0                  # 让球盘+大小球
+            1, 3, 3.0, 4.5, 3.0, 3.0              # 让球盘+大小球
         ], dtype=np.float64)
 
         # 避免除零
