@@ -53,8 +53,9 @@ class FeatureEngineer:
         # H2H 进阶
         'h2h_avg_total_goals', 'h2h_recent_home_wins',
 
-        # 其他特征 (4)
-        'home_advantage', 'rest_days_diff',
+        # 其他特征 (6)
+        'home_advantage', 'is_neutral_venue',
+        'strength_diff', 'rest_days_diff',
         'importance_score', 'league_avg_goals'
     ]
 
@@ -261,7 +262,7 @@ class FeatureEngineer:
         所有特征基于真实数据计算，不使用任何随机或哈希值
 
         Args:
-            match_data: 比赛信息 (home_team_name, away_team_name, league_name)
+            match_data: 比赛信息 (home_team_name, away_team_name, league_name, is_neutral)
             odds_data: 赔率数据
             team_form: 球队近期状态
             h2h_data: 交锋历史
@@ -271,13 +272,21 @@ class FeatureEngineer:
         home_team = match_data.get('home_team_name', '')
         away_team = match_data.get('away_team_name', '')
         league = match_data.get('league_name', '')
+        is_neutral = match_data.get('is_neutral', False)  # 是否中立场地
 
         home_strength = self._get_team_strength(home_team, team_form)
         away_strength = self._get_team_strength(away_team, team_form)
         strength_diff = home_strength - away_strength
 
+        # 中立场地判断：世界杯、欧冠淘汰赛、国际友谊赛等
+        neutral_keywords = ['世界杯', '欧洲杯', '美洲杯', '亚洲杯', '非洲杯', '国际赛', '友谊赛']
+        if any(kw in league for kw in neutral_keywords):
+            is_neutral = True
+
+        # 主场优势：中立场地为0，正常主场为0.12
+        home_adv = 0.0 if is_neutral else 0.12
+
         # ── 1. 赔率隐含概率特征 (0-7) ──
-        # 这是最强大的预测信号
         if odds_data:
             raw_odds = odds_data.get('odds', odds_data.get('raw_odds'))
             if raw_odds and len(raw_odds) == 3:
@@ -291,6 +300,19 @@ class FeatureEngineer:
             implied_h, implied_d, implied_a, margin = self._compute_implied_probabilities(
                 [h_odds, d_odds, a_odds]
             )
+
+            # 中立场地时，调整赔率隐含概率（移除主场优势假设）
+            if is_neutral and not match_data.get('odds_are_neutral', False):
+                # 赔率通常包含主场优势，中立场地需要调整
+                # 主场优势约 +3-5% 概率
+                adj = 0.04
+                implied_h = max(0.05, implied_h - adj)
+                implied_a = min(0.90, implied_a + adj * 0.7)
+                # 重新归一化
+                total = implied_h + implied_d + implied_a
+                implied_h /= total
+                implied_d /= total
+                implied_a /= total
 
             features[0] = implied_h       # 主胜隐含概率
             features[1] = implied_d       # 平局隐含概率
@@ -308,18 +330,12 @@ class FeatureEngineer:
             else:
                 features[7] = 2  # 客队是热门
         else:
-            # 无赔率时基于实力差异估算（使用Elo-like概率计算）
-            # 基于球队实力差异计算胜平负概率
-            strength_diff = home_strength - away_strength
-
-            # 使用广义逻辑函数从实力差映射到胜/平/负概率
-            # 主场优势约 +0.15 概率
-            home_adv = 0.12
-
-            # 主胜概率：Logistic函数
-            implied_h = 1.0 / (1.0 + np.exp(-(strength_diff / 15.0 - 0.5))) + home_adv
+            # 无赔率时基于实力差异估算
+            # 使用更强的实力差异信号（除以10而非15）
+            # 主胜概率：Logistic函数，实力差异权重更大
+            implied_h = 1.0 / (1.0 + np.exp(-(strength_diff / 10.0))) + home_adv
             # 客胜概率
-            implied_a = 1.0 / (1.0 + np.exp(-(-strength_diff / 15.0 - 0.5))) - home_adv * 0.3
+            implied_a = 1.0 / (1.0 + np.exp(-(-strength_diff / 10.0))) - home_adv * 0.3
 
             # 裁剪到合理范围
             implied_h = max(0.10, min(0.75, implied_h))
@@ -350,14 +366,15 @@ class FeatureEngineer:
             features[7] = 0 if implied_h >= implied_a else 2
 
         # ── 2. 球队实力特征 (8-15) ──
+        # 实力评分已扩大影响：差距10分以上时信号更强
         features[8] = max(1, 21 - home_strength // 5)   # 排名
         features[9] = max(1, 21 - away_strength // 5)
-        features[10] = home_strength * 0.75              # 积分
-        features[11] = away_strength * 0.75
-        features[12] = home_strength * 0.02 + 1.0        # 进球
-        features[13] = away_strength * 0.02 + 1.0
-        features[14] = (100 - home_strength) * 0.015 + 0.5  # 失球
-        features[15] = (100 - away_strength) * 0.015 + 0.5
+        features[10] = home_strength * 1.0               # 积分（权重提升）
+        features[11] = away_strength * 1.0
+        features[12] = home_strength * 0.025 + 0.8       # 进球
+        features[13] = away_strength * 0.025 + 0.8
+        features[14] = (100 - home_strength) * 0.02 + 0.3  # 失球
+        features[15] = (100 - away_strength) * 0.02 + 0.3
 
         # ── 3. 近期状态特征 (16-23) ──
         if team_form:
@@ -400,25 +417,28 @@ class FeatureEngineer:
             features[26] = round(2.0 + abs(strength_diff) * 0.02)
             features[27] = 1.5 + strength_diff * 0.01
 
-        # ── 5. 其他特征 (28-31) ──
-        features[28] = 1.0  # 主场优势标记
+        # ── 5. 其他特征 (28-33) ──
+        features[28] = 0.0 if is_neutral else 1.0  # 主场优势标记（中立场地为0）
+        features[29] = 1.0 if is_neutral else 0.0  # 中立场地标记
+        features[30] = strength_diff / 40.0         # 实力差异（归一化到约[-1, 1]）
 
         # 休息天数差异（默认0，有数据时填充）
-        features[29] = 0.0
+        features[31] = 0.0
 
         # 比赛重要性
         importance_map = {
+            '世界杯': 1.0, '欧洲杯': 0.98, '美洲杯': 0.95, '亚洲杯': 0.90,
             '欧冠': 0.95, '欧联杯': 0.85, '欧罗巴': 0.85,
             '英超': 0.75, '德甲': 0.75, '西甲': 0.75, '意甲': 0.75, '法甲': 0.70,
             '中超': 0.65, '日职': 0.60, '韩K': 0.55,
             '国际赛': 0.70,
         }
-        features[30] = importance_map.get(league, 0.6)
+        features[32] = importance_map.get(league, 0.6)
 
         # 联赛平均进球
-        features[31] = self.LEAGUE_AVG_GOALS.get(league, 2.6)
+        features[33] = self.LEAGUE_AVG_GOALS.get(league, 2.6)
 
-        # ── 6. 进阶滚动特征 (32-47) ──
+        # ── 6. 进阶滚动特征 (34-49) ──
         home_form_data = team_form.get(home_team, {}) if team_form else {}
         away_form_data = team_form.get(away_team, {}) if team_form else {}
 
@@ -429,10 +449,10 @@ class FeatureEngineer:
         h_ga = home_form_data.get('goals_against', 5)
         a_gf = away_form_data.get('goals_for', 5)
         a_ga = away_form_data.get('goals_against', 5)
-        features[32] = h_gf / n_matches  # 主队场均进球
-        features[33] = a_gf / n_matches  # 客队场均进球
-        features[34] = h_ga / n_matches  # 主队场均失球
-        features[35] = a_ga / n_matches  # 客队场均失球
+        features[34] = h_gf / n_matches  # 主队场均进球
+        features[35] = a_gf / n_matches  # 客队场均进球
+        features[36] = h_ga / n_matches  # 主队场均失球
+        features[37] = a_ga / n_matches  # 客队场均失球
 
         # 零封率（失败=0，默认0.1）
         h_wins = home_form_data.get('wins', 1)
@@ -444,37 +464,37 @@ class FeatureEngineer:
         h_total = max(h_wins + h_draws + h_losses, 1)
         a_total = max(a_wins + a_draws + a_losses, 1)
         # 零封率近似：胜场中约30%为零封
-        features[36] = min(1.0, (h_wins * 0.3 + h_draws * 0.5) / h_total)
-        features[37] = min(1.0, (a_wins * 0.3 + a_draws * 0.5) / a_total)
+        features[38] = min(1.0, (h_wins * 0.3 + h_draws * 0.5) / h_total)
+        features[39] = min(1.0, (a_wins * 0.3 + a_draws * 0.5) / a_total)
 
         # BTTS 率（双方进球率）近似
-        features[38] = min(1.0, (h_gf > 0 and h_ga > 0) * 0.6 + 0.2)
-        features[39] = min(1.0, (a_gf > 0 and a_ga > 0) * 0.6 + 0.2)
+        features[40] = min(1.0, (h_gf > 0 and h_ga > 0) * 0.6 + 0.2)
+        features[41] = min(1.0, (a_gf > 0 and a_ga > 0) * 0.6 + 0.2)
 
         # 状态趋势（近期 vs 预期）
         h_exp_pts = (self._get_team_strength(home_team, team_form) - 40) / 60 * 8 + 4
         a_exp_pts = (self._get_team_strength(away_team, team_form) - 40) / 60 * 8 + 4
         h_actual_pts = h_wins * 3 + h_draws
         a_actual_pts = a_wins * 3 + a_draws
-        features[40] = h_actual_pts - h_exp_pts  # 正=状态好于预期
-        features[41] = a_actual_pts - a_exp_pts
+        features[42] = h_actual_pts - h_exp_pts  # 正=状态好于预期
+        features[43] = a_actual_pts - a_exp_pts
 
         # 场均净胜球
-        features[42] = (h_gf - h_ga) / n_matches
-        features[43] = (a_gf - a_ga) / n_matches
+        features[44] = (h_gf - h_ga) / n_matches
+        features[45] = (a_gf - a_ga) / n_matches
 
         # 进球一致性（标准差近似：如果多场进球数接近，说明稳定）
-        features[44] = 1.0 - min(1.0, abs(h_gf / n_matches - 1.5) / 3)
-        features[45] = 1.0 - min(1.0, abs(a_gf / n_matches - 1.5) / 3)
+        features[46] = 1.0 - min(1.0, abs(h_gf / n_matches - 1.5) / 3)
+        features[47] = 1.0 - min(1.0, abs(a_gf / n_matches - 1.5) / 3)
 
         # H2H 进阶
         if h2h_data:
             total_h2h = h2h_data.get('home_wins', 0) + h2h_data.get('away_wins', 0) + h2h_data.get('draws', 0)
-            features[46] = (h2h_data.get('home_wins', 0) * 1.5 + h2h_data.get('away_wins', 0) * 1.2 + h2h_data.get('draws', 0)) / max(total_h2h, 1) * 2.5
-            features[47] = h2h_data.get('home_wins', 0) / max(total_h2h, 1) * 5  # 缩放
+            features[48] = (h2h_data.get('home_wins', 0) * 1.5 + h2h_data.get('away_wins', 0) * 1.2 + h2h_data.get('draws', 0)) / max(total_h2h, 1) * 2.5
+            features[49] = h2h_data.get('home_wins', 0) / max(total_h2h, 1) * 5  # 缩放
         else:
-            features[46] = 2.5
-            features[47] = 2.0
+            features[48] = 2.5
+            features[49] = 2.0
 
         return features
 
@@ -646,14 +666,14 @@ class FeatureEngineer:
     def normalize_features(self, features: np.ndarray) -> np.ndarray:
         """特征归一化到 [0, 1] 范围"""
         min_vals = np.array([
-            0, 0, 0, 0,    1.0, 1.0, 1.0, 0,    # 赔率概率
-            1, 1, 0, 0,    0, 0, 0, 0,            # 球队实力
-            0, 0, 0, 0,    0, 0, 0, 0,            # 近期状态
-            0, 0, 0, 0,                            # 交锋历史
-            0, 0, 0, 0,    0, 0, 0, 0,            # 进阶特征 (16)
-            0, 0, 0, 0,
-            0, 0, 0, 0,
-            0, -5, 0, 0                            # 其他
+            0, 0, 0, 0,    1.0, 1.0, 1.0, 0,    # 赔率概率 (8)
+            1, 1, 0, 0,    0, 0, 0, 0,            # 球队实力 (8)
+            0, 0, 0, 0,    0, 0, 0, 0,            # 近期状态 (8)
+            0, 0, 0, 0,                            # 交锋历史 (4)
+            0, 0, 0, 0,    0, 0, 0, 0,            # 进球效率+防守 (8)
+            0, 0, 0, 0,    0, 0, 0, 0,            # 趋势+一致性 (8)
+            0, 0,                                  # H2H 进阶 (2)
+            0, 0, -1, 0,   0, 0                   # 其他 (6)
         ], dtype=np.float64)
 
         max_vals = np.array([
@@ -661,10 +681,10 @@ class FeatureEngineer:
             20, 20, 100, 100, 5, 5, 5, 5,         # 球队实力
             5, 5, 5, 5,    5, 5, 30, 30,          # 近期状态
             10, 10, 10, 5,                          # 交锋历史
-            5, 5, 5, 5,    1, 1, 1, 1,            # 进阶特征
-            2, 2, 5, 5,
-            2, 2, 10, 5,
-            1, 5, 1, 5                             # 其他
+            5, 5, 5, 5,    1, 1, 1, 1,            # 进球效率+防守
+            10, 10, 5, 5,   1, 1,                  # 趋势+一致性
+            5, 5,                                  # H2H 进阶
+            1, 1, 1, 5,    1.5, 3.5               # 其他
         ], dtype=np.float64)
 
         # 避免除零
